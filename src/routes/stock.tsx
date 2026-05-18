@@ -1,0 +1,423 @@
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { fmtDateTime, fmtInt } from "@/lib/format";
+import { record_stock_movement } from "@/lib/stockMovements";
+import { getStockHealth, stockHealthMeta, type StockHealth } from "@/lib/domain";
+
+type StockRow = {
+  id: string;
+  name: string;
+  reference?: string | null;
+  min_stock?: number | null;
+  is_active?: boolean | null;
+  stockActuel: number;
+  stockDisponible: number;
+  stockReserve: number;
+  health: StockHealth;
+};
+
+export const Route = createFileRoute("/stock")({
+  head: () => ({
+    meta: [
+      { title: "Stock — Coffret ERP" },
+      { name: "description", content: "Liste des composants, niveaux de stock et historique des mouvements." },
+    ],
+  }),
+  component: StockPage,
+});
+
+function Tip({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Info className="inline h-3 w-3 ml-1 text-muted-foreground cursor-help align-middle" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[220px] text-xs">{children}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function StockPage() {
+  const sb = supabase as any;
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [presetComponentId, setPresetComponentId] = useState<string>("");
+  const [presetType, setPresetType] = useState<"IN" | "OUT" | "ADJUST">("IN");
+  const [presetReason, setPresetReason] = useState<string>("");
+  const [filter, setFilter] = useState<"all" | "rupture" | "critical" | "ok">("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const composants = useQuery({
+    queryKey: ["composants"],
+    queryFn: async () => {
+      const { data, error } = await sb.from("composants").select("*").order("reference");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const stockRows = useMemo<StockRow[]>(() => {
+    return (composants.data ?? []).map((c: any) => {
+      const stockActuel = Number(c.stock ?? 0);
+      const stockReserve = Math.max(0, Number(c.reserved_stock ?? 0));
+      const stockDisponible = stockActuel - stockReserve;
+      const health = getStockHealth(stockDisponible, Number(c.min_stock ?? 0));
+      return { ...c, stockActuel, stockDisponible, stockReserve, health };
+    });
+  }, [composants.data]);
+
+  const filteredRows = useMemo<StockRow[]>(() => {
+    if (filter === "all") return stockRows;
+    return stockRows.filter((row) => row.health === filter);
+  }, [filter, stockRows]);
+
+  const counts = useMemo(() => ({
+    all: stockRows.length,
+    rupture: stockRows.filter((r) => r.health === "rupture").length,
+    critical: stockRows.filter((r) => r.health === "critical").length,
+    ok: stockRows.filter((r) => r.health === "ok").length,
+  }), [stockRows]);
+
+  return (
+    <TooltipProvider delayDuration={400}>
+      <div className="p-4 md:p-8 max-w-7xl mx-auto">
+        <header className="mb-6 flex items-end justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">Inventaire</p>
+            <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Stock</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/production" className="inline-flex items-center rounded-md border border-input px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">Réserver pour OF</Link>
+            <Button variant="outline" onClick={() => { setPresetComponentId(""); setPresetType("OUT"); setPresetReason("Sortie atelier"); setDialogOpen(true); }}>Sortie stock</Button>
+            <Button onClick={() => { setPresetComponentId(""); setPresetType("IN"); setPresetReason("Réapprovisionnement"); setDialogOpen(true); }}>+ Réapprovisionnement</Button>
+          </div>
+        </header>
+
+        <MouvementDialog
+          composants={composants.data ?? []}
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          presetComponentId={presetComponentId}
+          presetType={presetType}
+          presetReason={presetReason}
+        />
+
+        {/* Filter bar */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {([
+            ["all", "Tous", counts.all],
+            ["rupture", "En rupture", counts.rupture],
+            ["critical", "Presque vide", counts.critical],
+            ["ok", "OK", counts.ok],
+          ] as const).map(([key, label, count]) => (
+            <Button key={key} size="sm" variant={filter === key ? "default" : "outline"} onClick={() => setFilter(key)}>
+              {label} ({count})
+            </Button>
+          ))}
+        </div>
+
+        {/* Stock table */}
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
+                  <tr>
+                    <th className="w-8 p-3" />
+                    <th className="text-left p-3">Référence / Désignation</th>
+                    <th className="text-right p-3">
+                      Stock
+                      <Tip>Quantité physique en stock. Mis à jour à chaque entrée ou sortie.</Tip>
+                    </th>
+                    <th className="text-right p-3">
+                      Réservé
+                      <Tip>Quantité bloquée pour des ordres de fabrication en cours. Non disponible pour d'autres OFs.</Tip>
+                    </th>
+                    <th className="text-right p-3">
+                      Disponible
+                      <Tip>Stock − Réservé. Ce qu'on peut encore utiliser pour de nouveaux OFs.</Tip>
+                    </th>
+                    <th className="text-center p-3">État</th>
+                    <th className="text-right p-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stockRows.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-sm text-muted-foreground text-center" colSpan={7}>
+                        Aucun composant trouvé.
+                      </td>
+                    </tr>
+                  ) : filteredRows.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-sm text-muted-foreground text-center" colSpan={7}>
+                        <Button size="sm" variant="outline" onClick={() => setFilter("all")}>Voir tous les stocks</Button>
+                      </td>
+                    </tr>
+                  ) : filteredRows.map((c) => {
+                    const meta = stockHealthMeta[c.health];
+                    const expanded = expandedId === c.id;
+                    return [
+                      <tr key={c.id} className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => setExpandedId(expanded ? null : c.id)}>
+                        <td className="p-3 text-muted-foreground">
+                          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </td>
+                        <td className="p-3">
+                          <div className="font-mono text-xs text-muted-foreground">{c.reference}</div>
+                          <div className="font-medium">{c.name}</div>
+                        </td>
+                        <td className="p-3 text-right tabular font-semibold">{fmtInt(c.stockActuel)}</td>
+                        <td className="p-3 text-right tabular text-blue-600 dark:text-blue-400">
+                          {c.stockReserve > 0 ? fmtInt(c.stockReserve) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className={`p-3 text-right tabular font-semibold ${c.health === "rupture" ? "text-destructive" : c.health === "critical" ? "text-warning" : "text-success"}`}>
+                          {fmtInt(c.stockDisponible)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
+                        </td>
+                        <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex flex-wrap justify-end gap-1.5">
+                            <Button size="sm" variant="outline" onClick={() => { setPresetComponentId(c.id); setPresetType("IN"); setPresetReason("Réapprovisionnement"); setDialogOpen(true); }}>
+                              + Entrée
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => { setPresetComponentId(c.id); setPresetType("OUT"); setPresetReason("Sortie atelier"); setDialogOpen(true); }}>
+                              Sortie
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>,
+                      expanded && (
+                        <tr key={`${c.id}-detail`} className="bg-muted/20 border-t border-dashed border-border">
+                          <td colSpan={7} className="p-0">
+                            <ComponentDetail composantId={c.id} composantName={c.name} />
+                          </td>
+                        </tr>
+                      ),
+                    ];
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function ComponentDetail({ composantId, composantName }: { composantId: string; composantName: string }) {
+  const sb = supabase as any;
+
+  const movements = useQuery({
+    queryKey: ["composant_movements", composantId],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("stock_movements")
+        .select("*")
+        .eq("composant_id", composantId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+
+  const reservations = useQuery({
+    queryKey: ["composant_reservations", composantId],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("stock_reservations")
+        .select("quantity, production_order_id, status")
+        .eq("composant_id", composantId)
+        .eq("status", "active");
+      if (error) throw error;
+      const rows = (data ?? []) as any[];
+      if (rows.length === 0) return [];
+
+      const orderIds = rows.map((r: any) => r.production_order_id).filter(Boolean);
+      const { data: orders } = await sb
+        .from("production_orders")
+        .select("id, reference, status")
+        .in("id", orderIds);
+      const orderMap = new Map((orders ?? []).map((o: any) => [o.id, o]));
+      return rows.map((r: any) => ({ ...r, order: orderMap.get(r.production_order_id) ?? null }));
+    },
+  });
+
+  return (
+    <div className="px-6 py-4 grid md:grid-cols-2 gap-6">
+      {/* Reservations */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+          Réservations actives
+        </div>
+        {reservations.isLoading ? (
+          <p className="text-xs text-muted-foreground">Chargement…</p>
+        ) : (reservations.data ?? []).length === 0 ? (
+          <p className="text-xs text-muted-foreground">Aucune réservation en cours pour ce composant.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {(reservations.data ?? []).map((r: any) => (
+              <div key={r.production_order_id} className="flex items-center justify-between rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 px-3 py-1.5 text-xs">
+                <span className="font-mono font-medium">{r.order?.reference ?? r.production_order_id?.slice(0, 8)}</span>
+                <span className="ml-3 text-muted-foreground capitalize">{r.order?.status ?? "—"}</span>
+                <span className="ml-auto font-semibold">{fmtInt(r.quantity)} unités</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Movement history */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+          Derniers mouvements
+        </div>
+        {movements.isLoading ? (
+          <p className="text-xs text-muted-foreground">Chargement…</p>
+        ) : (movements.data ?? []).length === 0 ? (
+          <p className="text-xs text-muted-foreground">Aucun mouvement enregistré pour ce composant.</p>
+        ) : (
+          <div className="space-y-1">
+            {(movements.data ?? []).map((m: any) => (
+              <div key={m.id} className="flex items-center gap-3 text-xs border-b border-border/40 py-1 last:border-0">
+                <span className="text-muted-foreground tabular w-32 shrink-0">{fmtDateTime(m.created_at)}</span>
+                {m.type === "IN" ? (
+                  <span className="inline-flex items-center gap-1 rounded-sm border border-success/30 bg-success/10 px-1.5 py-0.5 font-medium">
+                    <ArrowDown className="h-3 w-3 text-success" /> Entrée
+                  </span>
+                ) : m.type === "OUT" ? (
+                  <span className="inline-flex items-center gap-1 rounded-sm border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 font-medium">
+                    <ArrowUp className="h-3 w-3 text-destructive" /> Sortie
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-sm border border-border bg-muted px-1.5 py-0.5 font-medium">Ajust.</span>
+                )}
+                <span className="font-semibold tabular">{m.type === "OUT" ? "-" : "+"}{fmtInt(m.quantity)}</span>
+                {m.reason && <span className="text-muted-foreground truncate">{m.reason}</span>}
+                {m.source_type === "production_order" && !m.reason && (
+                  <span className="text-muted-foreground italic">OF production</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MouvementDialog({
+  composants,
+  open,
+  onOpenChange,
+  presetComponentId,
+  presetType,
+  presetReason,
+}: {
+  composants: { id: string; reference: string; name: string }[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  presetComponentId?: string;
+  presetType?: "IN" | "OUT" | "ADJUST";
+  presetReason?: string;
+}) {
+  const [composantId, setComposantId] = useState<string>("");
+  const [type, setType] = useState<"IN" | "OUT" | "ADJUST">("IN");
+  const [qty, setQty] = useState<string>("");
+  const [reason, setReason] = useState<string>("");
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!open) return;
+    setComposantId(presetComponentId ?? "");
+    setType(presetType ?? "IN");
+    setReason(presetReason ?? "");
+    setQty("");
+  }, [open, presetComponentId, presetType, presetReason]);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const quantity = parseInt(qty, 10);
+      if (!composantId || !quantity || quantity <= 0) throw new Error("Composant et quantité requis");
+      await record_stock_movement({
+        composant_id: composantId,
+        type,
+        quantity,
+        reason: reason || null,
+        source_type: "manual_fix",
+        source_id: null,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Mouvement enregistré");
+      qc.invalidateQueries({ queryKey: ["composants"] });
+      qc.invalidateQueries({ queryKey: ["composant_movements"] });
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const typeLabel = type === "IN" ? "Entrée" : type === "OUT" ? "Sortie" : "Ajustement";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{typeLabel} de stock</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Composant</Label>
+            <Select value={composantId} onValueChange={setComposantId}>
+              <SelectTrigger><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+              <SelectContent>
+                {composants.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <span className="font-mono text-xs mr-2">{c.reference}</span>{c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Type de mouvement</Label>
+              <Select value={type} onValueChange={(v) => setType(v as "IN" | "OUT" | "ADJUST")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="IN">Entrée (réappro, correction +)</SelectItem>
+                  <SelectItem value="OUT">Sortie (perte, casse, correction −)</SelectItem>
+                  <SelectItem value="ADJUST">Ajustement (inventaire)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Quantité</Label>
+              <Input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Motif <span className="text-muted-foreground text-xs">(optionnel)</span></Label>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex : Réception fournisseur, casse, inventaire…" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>Enregistrer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
