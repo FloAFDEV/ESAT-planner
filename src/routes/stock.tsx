@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info, Trash2 } from "lucide-react";
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { record_stock_movement } from "@/lib/stockMovements";
 import { getStockHealth, stockHealthMeta, type StockHealth } from "@/lib/domain";
@@ -50,21 +50,52 @@ function Tip({ children }: { children: React.ReactNode }) {
 
 function StockPage() {
   const sb = supabase as any;
+  const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [presetComponentId, setPresetComponentId] = useState<string>("");
   const [presetType, setPresetType] = useState<"IN" | "OUT" | "ADJUST">("IN");
   const [presetReason, setPresetReason] = useState<string>("");
   const [filter, setFilter] = useState<"all" | "rupture" | "critical" | "ok">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; reference: string; name: string; stock: number } | null>(null);
+  const [deleteCode, setDeleteCode] = useState<string>("");
+  const [deleteInput, setDeleteInput] = useState<string>("");
 
   const composants = useQuery({
     queryKey: ["composants"],
     queryFn: async () => {
-      const { data, error } = await sb.from("composants").select("*").order("reference");
+      const { data, error } = await sb
+        .from("composants")
+        .select("*")
+        .is("deleted_at", null)
+        .order("reference");
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const deleteComposant = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await sb.rpc("safe_delete_composant", { p_composant_id: id });
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.message || data.error || "Suppression impossible");
+    },
+    onSuccess: () => {
+      toast.success("Composant supprimé");
+      qc.invalidateQueries({ queryKey: ["composants"] });
+      qc.invalidateQueries({ queryKey: ["nomenclatures"] });
+      setDeleteTarget(null);
+      setDeleteInput("");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function openDeleteDialog(c: { id: string; reference: string; name: string; stockActuel: number }) {
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    setDeleteCode(code);
+    setDeleteInput("");
+    setDeleteTarget({ id: c.id, reference: c.reference, name: c.name, stock: c.stockActuel });
+  }
 
   const stockRows = useMemo<StockRow[]>(() => {
     return (composants.data ?? []).map((c: any) => {
@@ -194,6 +225,9 @@ function StockPage() {
                             <Button size="sm" variant="outline" onClick={() => { setPresetComponentId(c.id); setPresetType("OUT"); setPresetReason("Sortie atelier"); setDialogOpen(true); }}>
                               Sortie
                             </Button>
+                            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => openDeleteDialog(c)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </td>
                       </tr>,
@@ -212,6 +246,56 @@ function StockPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Dialog suppression composant avec code de confirmation ── */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) { setDeleteTarget(null); setDeleteInput(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Supprimer le composant</DialogTitle>
+          </DialogHeader>
+          {deleteTarget && (
+            <div className="space-y-4">
+              <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm space-y-1">
+                <div className="font-mono text-xs text-muted-foreground">{deleteTarget.reference}</div>
+                <div className="font-semibold">{deleteTarget.name}</div>
+                {deleteTarget.stock > 0 && (
+                  <div className="text-xs text-warning mt-1">
+                    ⚠ Stock actuel : {fmtInt(deleteTarget.stock)} unités — un mouvement de sortie sera enregistré automatiquement.
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Cette action est irréversible. L'historique des mouvements de stock sera conservé. Le composant sera retiré de toutes les listes.
+              </p>
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Code de confirmation</div>
+                <div className="text-2xl font-mono font-bold tracking-widest text-destructive">{deleteCode}</div>
+              </div>
+              <div className="space-y-2">
+                <Label>Saisissez le code ci-dessus pour confirmer</Label>
+                <Input
+                  value={deleteInput}
+                  onChange={(e) => setDeleteInput(e.target.value)}
+                  placeholder="_ _ _ _"
+                  className="text-center font-mono text-lg tracking-widest"
+                  maxLength={4}
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteInput(""); }}>Annuler</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteInput !== deleteCode || deleteComposant.isPending}
+              onClick={() => deleteTarget && deleteComposant.mutate(deleteTarget.id)}
+            >
+              Supprimer définitivement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }

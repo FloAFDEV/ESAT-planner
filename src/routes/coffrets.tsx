@@ -53,7 +53,11 @@ function CoffretsPage() {
   const coffrets = useQuery({
     queryKey: ["coffrets", "manage"],
     queryFn: async () => {
-      const { data, error } = await sb.from("coffrets").select("*").order("reference");
+      const { data, error } = await sb
+        .from("coffrets")
+        .select("*")
+        .is("deleted_at", null)
+        .order("reference");
       if (error) throw error;
       return data as any[];
     },
@@ -62,7 +66,11 @@ function CoffretsPage() {
   const composants = useQuery({
     queryKey: ["composants", "light"],
     queryFn: async () => {
-      const { data, error } = await sb.from("composants").select("id,reference,name").order("reference");
+      const { data, error } = await sb
+        .from("composants")
+        .select("id,reference,name")
+        .is("deleted_at", null)
+        .order("reference");
       if (error) throw error;
       return data as any[];
     },
@@ -163,11 +171,12 @@ function CoffretsPage() {
   const deleteCoffret = useMutation({
     mutationFn: async () => {
       if (!selectedId) return;
-      const { error } = await sb.from("coffrets").delete().eq("id", selectedId);
+      const { data, error } = await sb.rpc("soft_delete_coffret", { p_coffret_id: selectedId });
       if (error) throw error;
+      if (data && data.success === false) throw new Error(data.error || "Archivage impossible");
     },
     onSuccess: () => {
-      toast.success("Coffret supprimé");
+      toast.success("Coffret archivé");
       qc.invalidateQueries({ queryKey: ["coffrets"] });
       setSelectedId("");
       setDeleteConfirmOpen(false);
@@ -295,7 +304,7 @@ function CoffretsPage() {
               <CardTitle className="text-base">Édition coffret</CardTitle>
               {activeCoffret && (
                 <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Supprimer
+                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Archiver
                 </Button>
               )}
             </CardHeader>
@@ -479,14 +488,16 @@ function CoffretsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete coffret confirm ── */}
+      {/* ── Archive coffret confirm ── */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Supprimer {activeCoffret?.reference} ?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">La nomenclature et les ordres de fabrication liés seront conservés mais ne pourront plus référencer ce coffret.</p>
+          <DialogHeader><DialogTitle>Archiver {activeCoffret?.reference} ?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Le coffret sera archivé et n'apparaîtra plus dans les listes. Les ordres de fabrication existants conservent leur historique complet grâce au snapshot intégré.
+          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Annuler</Button>
-            <Button variant="destructive" onClick={() => deleteCoffret.mutate()} disabled={deleteCoffret.isPending}>Supprimer</Button>
+            <Button variant="destructive" onClick={() => deleteCoffret.mutate()} disabled={deleteCoffret.isPending}>Archiver</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
