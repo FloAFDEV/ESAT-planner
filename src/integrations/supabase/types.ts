@@ -17,6 +17,7 @@ export type Database = {
       coffrets: {
         Row: {
           created_at: string
+          deleted_at: string | null
           id: string
           name: string
           nb_par_palette: number
@@ -27,6 +28,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name: string
           nb_par_palette?: number
@@ -37,6 +39,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           name?: string
           nb_par_palette?: number
@@ -50,31 +53,40 @@ export type Database = {
       composants: {
         Row: {
           created_at: string
+          deleted_at: string | null
           id: string
+          is_active: boolean
           min_stock: number
           name: string
           poids_unitaire: number
           reference: string
+          reserved_stock: number
           stock: number
           updated_at: string
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
+          is_active?: boolean
           min_stock?: number
           name: string
           poids_unitaire?: number
           reference: string
+          reserved_stock?: number
           stock?: number
           updated_at?: string
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
+          is_active?: boolean
           min_stock?: number
           name?: string
           poids_unitaire?: number
           reference?: string
+          reserved_stock?: number
           stock?: number
           updated_at?: string
         }
@@ -131,6 +143,7 @@ export type Database = {
           id: string
           reference: string
           signature: string | null
+          status: string
           total_palette: number
           total_poids: number
         }
@@ -142,6 +155,7 @@ export type Database = {
           id?: string
           reference?: string
           signature?: string | null
+          status?: string
           total_palette?: number
           total_poids?: number
         }
@@ -153,6 +167,7 @@ export type Database = {
           id?: string
           reference?: string
           signature?: string | null
+          status?: string
           total_palette?: number
           total_poids?: number
         }
@@ -238,10 +253,12 @@ export type Database = {
       production_orders: {
         Row: {
           coffret_id: string
+          coffret_snapshot: Json | null
           created_at: string
           done_at: string | null
           id: string
           notes: string | null
+          priority: number
           quantity: number
           reference: string
           status: Database["public"]["Enums"]["production_status"]
@@ -249,10 +266,12 @@ export type Database = {
         }
         Insert: {
           coffret_id: string
+          coffret_snapshot?: Json | null
           created_at?: string
           done_at?: string | null
           id?: string
           notes?: string | null
+          priority?: number
           quantity: number
           reference?: string
           status?: Database["public"]["Enums"]["production_status"]
@@ -260,10 +279,12 @@ export type Database = {
         }
         Update: {
           coffret_id?: string
+          coffret_snapshot?: Json | null
           created_at?: string
           done_at?: string | null
           id?: string
           notes?: string | null
+          priority?: number
           quantity?: number
           reference?: string
           status?: Database["public"]["Enums"]["production_status"]
@@ -306,15 +327,19 @@ export type Database = {
       validate_production_order: { Args: { p_order_id: string }; Returns: Json }
     }
   Enums: {
-  mouvement_type: "IN" | "OUT"
-  production_status:
-    | "draft"
-    | "ready"
-    | "in_progress"
-    | "paused"
-    | "done"
-    | "cancelled"
-}
+      mouvement_type: "IN" | "OUT"
+      production_status:
+        | "draft"
+        | "in_progress"
+        | "done"
+        | "priority"
+        | "brouillon"
+        | "pret"
+        | "en_cours"
+        | "en_pause"
+        | "termine"
+        | "annule"
+    }
     CompositeTypes: {
       [_ in never]: never
     }
@@ -442,7 +467,7 @@ export const Constants = {
   public: {
     Enums: {
       mouvement_type: ["IN", "OUT"],
-      production_status: ["draft", "in_progress", "done", "priority"],
+      production_status: ["draft", "in_progress", "done", "priority", "brouillon", "pret", "en_cours", "en_pause", "termine", "annule"],
     },
   },
 } as const
