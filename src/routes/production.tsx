@@ -107,7 +107,7 @@ function ProductionPage() {
     queryFn: async () => {
       const { data: rawOrders, error } = await sb
         .from("production_orders")
-        .select("*")
+        .select("*, coffret_snapshot")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
@@ -175,6 +175,25 @@ function ProductionPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const cancelOrder = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await sb.rpc("cancel_production_order_with_unreserve", {
+        p_order_id: id,
+      });
+      if (error) throw error;
+      if (data && data.success === false) {
+        throw new Error(data.error || "Annulation impossible");
+      }
+    },
+    onSuccess: () => {
+      toast.success("Fabrication annulée");
+      qc.invalidateQueries({ queryKey: ["production_orders"] });
+      qc.invalidateQueries({ queryKey: ["composants"] });
+      qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -490,12 +509,16 @@ function ProductionPage() {
                     const status = String(o.status);
                     const canStart = status === "draft" || status === "priority";
                     const canFinish = status === "in_progress";
+                    const canCancel = status === "draft" || status === "priority" || status === "in_progress";
+                    const snapshot = o.coffret_snapshot as { reference?: string; name?: string } | null;
+                    const coffretName = o.coffret?.name ?? snapshot?.name ?? "Coffret archivé";
+                    const coffretRef = o.coffret?.reference ?? snapshot?.reference ?? "—";
 
                     return (
                       <tr key={o.id} className="border-t border-border">
                         <td className="p-3">
-                          <div className="font-medium">{o.coffret?.name ?? "Données manquantes"}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{o.coffret?.reference ?? "Données manquantes"}</div>
+                          <div className="font-medium">{coffretName}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{coffretRef}</div>
                         </td>
                         <td className="p-3 text-right tabular font-semibold">{fmtInt(o.quantity)}</td>
                         <td className="p-3 text-center">
@@ -518,6 +541,11 @@ function ProductionPage() {
                             {canFinish && (
                               <Button size="sm" variant="outline" onClick={() => finish.mutate(o.id)} disabled={finish.isPending}>
                                 Terminer
+                              </Button>
+                            )}
+                            {canCancel && (
+                              <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => cancelOrder.mutate(o.id)} disabled={cancelOrder.isPending}>
+                                Annuler
                               </Button>
                             )}
                           </div>
