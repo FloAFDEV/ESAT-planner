@@ -66,7 +66,11 @@ function CoffretsPage() {
   const composants = useQuery({
     queryKey: ["composants", "light"],
     queryFn: async () => {
-      const { data, error } = await sb.from("composants").select("id,reference,name").order("reference");
+      const { data, error } = await sb
+        .from("composants")
+        .select("id,reference,name")
+        .is("deleted_at", null)
+        .order("reference");
       if (error) throw error;
       return data as any[];
     },

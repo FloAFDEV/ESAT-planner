@@ -46,7 +46,11 @@ function ProductionPage() {
   const coffrets = useQuery({
     queryKey: ["coffrets", "production"],
     queryFn: async () => {
-      const { data, error } = await sb.from("coffrets").select("id,reference,name").order("reference");
+      const { data, error } = await sb
+        .from("coffrets")
+        .select("id,reference,name")
+        .is("deleted_at", null)
+        .order("reference");
       if (error) throw error;
       return data ?? [];
     },
