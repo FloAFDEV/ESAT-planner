@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +32,23 @@ type ShipmentLineDraft = { product_variant_id: string; quantity: number };
 function LivraisonsPage() {
   const sb = supabase as any;
   const qc = useQueryClient();
+
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteShipment = useMutation({
+    mutationFn: async (id: string) => {
+      const { error: lineError } = await sb.from("shipment_lines").delete().eq("shipment_id", id);
+      if (lineError) throw lineError;
+      const { error } = await sb.from("shipments").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      toast.success("Expédition supprimée");
+      setDeleteId(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const transitionShipment = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: LivraisonStatus }) => {
@@ -229,13 +246,14 @@ function LivraisonsPage() {
                     </span>
                   </div>
                 </div>
-                <Link
-                  to="/livraisons/$id"
-                  params={{ id: s.id }}
-                  className="inline-flex items-center gap-1.5 text-sm rounded-md border border-input px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:bg-destructive/10"
+                  onClick={() => setDeleteId(s.id)}
                 >
-                  Ouvrir
-                </Link>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </CardHeader>
               <CardContent>
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -276,6 +294,25 @@ function LivraisonsPage() {
           );
         })}
       </div>
+
+      <Dialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer l'expédition ?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Cette action est irréversible. L'expédition et ses lignes seront définitivement supprimées.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Annuler</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteShipment.isPending}
+              onClick={() => { if (deleteId) deleteShipment.mutate(deleteId); }}
+            >
+              Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
