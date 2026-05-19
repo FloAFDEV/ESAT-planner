@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { router } from "@/router";
 import type { Session, User } from "@supabase/supabase-js";
 
 export type AuthContextType = {
@@ -19,15 +21,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-
+    // onAuthStateChange fires INITIAL_SESSION immediately, replacing the need
+    // for a separate getSession() call and eliminating the race between the two.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      // flushSync forces React to apply the state update synchronously before
+      // returning, so router.invalidate() runs with an already-updated context.
+      // Without this, navigate() / beforeLoad runs against the stale session.
+      flushSync(() => {
+        setSession(session);
+        setLoading(false);
+      });
+      router.invalidate();
     });
 
     return () => subscription.unsubscribe();
