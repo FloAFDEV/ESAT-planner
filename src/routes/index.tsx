@@ -47,7 +47,7 @@ function Dashboard() {
     queryKey: ["composants"],
     refetchInterval: 15000,
     queryFn: async () => {
-      const { data, error } = await sb.from("composants").select("id,reference,name,min_stock,is_active").order("reference");
+      const { data, error } = await sb.from("composants").select("id,reference,name,min_stock,is_active").is("deleted_at", null).order("reference");
       if (error) throw error;
       return data;
     },
