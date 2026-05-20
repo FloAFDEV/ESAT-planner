@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileDown } from "lucide-react";
+import { ChevronsUpDown, FileDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { fmtInt } from "@/lib/format";
 import { normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
@@ -42,6 +44,8 @@ function ProductionPage() {
   const [urgent, setUrgent] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportQtys, setExportQtys] = useState<Record<string, string>>({});
+  const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({});
+  const [comboSearch, setComboSearch] = useState<Record<string, string>>({});
 
   const coffrets = useQuery({
     queryKey: ["coffrets", "production"],
@@ -373,23 +377,54 @@ function ProductionPage() {
                 <div className="grid md:grid-cols-12 gap-3 items-end">
                   <div className="md:col-span-6">
                     <label className="text-xs text-muted-foreground">Coffret</label>
-                    <Select
-                      value={row.coffret_id}
-                      onValueChange={(value) =>
-                        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, coffret_id: value } : r)))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(coffrets.data ?? []).map((c: any) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            <span className="font-mono text-xs mr-2">{c.reference}</span>{c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {(() => {
+                      const selected = (coffrets.data ?? []).find((c: any) => c.id === row.coffret_id);
+                      const search = (comboSearch[row.id] ?? "").toLowerCase();
+                      const filtered = (coffrets.data ?? []).filter((c: any) =>
+                        !search || c.reference.toLowerCase().includes(search) || c.name.toLowerCase().includes(search)
+                      );
+                      return (
+                        <Popover
+                          open={comboOpen[row.id] ?? false}
+                          onOpenChange={(open) => setComboOpen((p) => ({ ...p, [row.id]: open }))}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between font-normal truncate">
+                              {selected
+                                ? <span className="truncate"><span className="font-mono text-xs mr-2">{selected.reference}</span>{selected.name}</span>
+                                : <span className="text-muted-foreground">Sélectionner un coffret…</span>}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[340px] p-0" align="start">
+                            <Command shouldFilter={false}>
+                              <CommandInput
+                                placeholder="Rechercher par référence ou nom…"
+                                value={comboSearch[row.id] ?? ""}
+                                onValueChange={(v) => setComboSearch((p) => ({ ...p, [row.id]: v }))}
+                              />
+                              <CommandList>
+                                {filtered.length === 0 && <CommandEmpty>Aucun coffret trouvé</CommandEmpty>}
+                                {filtered.map((c: any) => (
+                                  <CommandItem
+                                    key={c.id}
+                                    value={c.id}
+                                    onSelect={() => {
+                                      setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, coffret_id: c.id } : r));
+                                      setComboOpen((p) => ({ ...p, [row.id]: false }));
+                                      setComboSearch((p) => ({ ...p, [row.id]: "" }));
+                                    }}
+                                  >
+                                    <span className="font-mono text-xs mr-2 text-muted-foreground">{c.reference}</span>
+                                    <span>{c.name}</span>
+                                  </CommandItem>
+                                ))}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      );
+                    })()}
                   </div>
 
                   <div className="md:col-span-3">
