@@ -141,7 +141,7 @@ function ProductionPage() {
         const { data, error } = await sb.rpc("create_production_order_atomic", {
           p_coffret_id: row.coffret_id,
           p_quantity: row.quantity,
-          p_status: urgent ? "priority" : "draft",
+          p_status: urgent ? "draft" : "draft",
           p_priority: urgent ? 1 : 0,
           p_notes: null,
           p_idempotency_key: `production:${row.id}:${row.coffret_id}:${row.quantity}:${urgent ? 1 : 0}`,
