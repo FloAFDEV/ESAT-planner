@@ -413,6 +413,9 @@ $$;
 -- 'priority' = marqueur d'urgence, pas un état terminal.
 -- Seul 'done' est terminal.
 
+DROP FUNCTION IF EXISTS public.transition_production_order_status(uuid, text);
+DROP FUNCTION IF EXISTS public.transition_production_order_status(uuid, text, integer);
+
 CREATE OR REPLACE FUNCTION public.transition_production_order_status(
   p_order_id uuid,
   p_status   text,
