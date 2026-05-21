@@ -201,6 +201,10 @@ $$;
 -- Insère les mouvements OUT → trigger décrémente composants.stock.
 -- Libère les réservations consommées.
 
+-- DROP les deux surcharges pour éviter l'ambiguïté de surcharge
+DROP FUNCTION IF EXISTS public.validate_production_order(uuid);
+DROP FUNCTION IF EXISTS public.validate_production_order(uuid, integer);
+
 CREATE OR REPLACE FUNCTION public.validate_production_order(
   p_order_id uuid,
   p_qty      integer DEFAULT NULL  -- NULL = valider tout le restant

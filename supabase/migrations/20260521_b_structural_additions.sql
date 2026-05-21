@@ -21,7 +21,20 @@ ALTER TABLE public.mouvements
   ADD COLUMN IF NOT EXISTS source_type text,
   ADD COLUMN IF NOT EXISTS source_id   uuid;
 
--- 3. Régénérer la VIEW stock_movements pour inclure les nouvelles colonnes
+-- 3. Convertir stock_movements en VIEW (était une TABLE dans certains envs)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'stock_movements'
+  ) THEN
+    DROP TABLE public.stock_movements CASCADE;
+  ELSIF EXISTS (
+    SELECT 1 FROM pg_views WHERE schemaname = 'public' AND viewname = 'stock_movements'
+  ) THEN
+    DROP VIEW public.stock_movements CASCADE;
+  END IF;
+END $$;
+
 CREATE OR REPLACE VIEW public.stock_movements AS
 SELECT
   id, composant_id, type, quantity,
@@ -29,6 +42,20 @@ SELECT
   source_type, source_id,
   created_at
 FROM public.mouvements;
+
+-- Recréer stock_by_composant si supprimée en cascade
+CREATE OR REPLACE VIEW public.stock_by_composant AS
+SELECT
+  m.composant_id,
+  COALESCE(SUM(
+    CASE
+      WHEN m.type::text IN ('IN','ADJUST') THEN  m.quantity
+      WHEN m.type::text = 'OUT'            THEN -m.quantity
+      ELSE 0
+    END
+  ), 0)::bigint AS total_stock
+FROM public.mouvements m
+GROUP BY m.composant_id;
 
 -- 4. is_active sur nomenclatures (désactiver une ligne BOM sans la supprimer)
 ALTER TABLE public.nomenclatures
