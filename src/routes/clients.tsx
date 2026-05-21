@@ -369,7 +369,7 @@ function ClientsPage() {
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-muted/80 text-xs uppercase tracking-wider text-muted-foreground">
+                      <thead className="bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground">
                         <tr>
                           <th className="text-left p-3">Référence</th>
                           <th className="text-left p-3">Date</th>

@@ -99,9 +99,14 @@ export function AppLayout() {
               Coffret ERP
             </span>
           </div>
-          <button onClick={toggle} className="p-1.5 rounded hover:bg-sidebar-accent transition-colors">
-            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={toggle} className="p-1.5 rounded hover:bg-sidebar-accent transition-colors">
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button onClick={handleSignOut} className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors" title="Déconnexion">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex border-t border-sidebar-border overflow-x-auto">
