@@ -47,27 +47,17 @@ function Dashboard() {
     queryKey: ["composants"],
     refetchInterval: 15000,
     queryFn: async () => {
-      const { data, error } = await sb.from("composants").select("id,reference,name,min_stock,is_active").is("deleted_at", null).order("reference");
+      const { data, error } = await sb
+        .from("composants")
+        .select("id,reference,name,stock,reserved_stock,min_stock,is_active")
+        .is("deleted_at", null)
+        .order("reference");
       if (error) throw error;
       return data;
     },
   });
 
   const componentIds = useMemo(() => ((composants.data ?? []) as any[]).map((c) => c.id), [composants.data]);
-
-  const stockAgg = useQuery({
-    queryKey: ["stock_snapshot", "dashboard", componentIds],
-    enabled: componentIds.length > 0,
-    refetchInterval: 10000,
-    queryFn: async () => {
-      if (!componentIds.length) return [];
-      const { data, error } = await sb.rpc("get_stock_snapshot_by_components", {
-        component_ids: componentIds,
-      });
-      if (error) return [];
-      return data ?? [];
-    },
-  });
 
   const orders = useQuery({
     queryKey: ["production_orders", "active"],
@@ -172,11 +162,9 @@ function Dashboard() {
     },
   });
 
-  const stockById = new Map<string, number>(((stockAgg.data ?? []) as any[]).map((r: any) => [r.composant_id, Number(r.available_stock ?? 0)]));
-
   const composantsWithStock = ((composants.data ?? []) as any[]).map((c: any) => {
     const stockBrut = Number(c.stock ?? 0);
-    const stock = stockById.get(c.id) ?? 0;
+    const stock = Math.max(0, stockBrut - Number(c.reserved_stock ?? 0));
     return { ...c, stockBrut, stock };
   });
 
