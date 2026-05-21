@@ -18,6 +18,23 @@ import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 
 type ProdRow = { id: string; coffret_id: string; quantity: number };
 
+// Génère ou récupère une clé d'idempotence stable pour la session courante.
+// Clé stockée dans sessionStorage → survit aux re-renders mais pas au
+// rechargement complet de l'onglet. Évite les doublons d'OF sur retry réseau.
+function getIdempotencyKey(coffret_id: string, quantity: number, priority: number): string {
+  const fingerprint = `${coffret_id}:${quantity}:${priority}`;
+  const storageKey  = `ikey:${fingerprint}`;
+  let key = sessionStorage.getItem(storageKey);
+  if (!key) {
+    key = `of:${fingerprint}:${Date.now()}`;
+    sessionStorage.setItem(storageKey, key);
+  }
+  return key;
+}
+function clearIdempotencyKey(coffret_id: string, quantity: number, priority: number): void {
+  sessionStorage.removeItem(`ikey:${coffret_id}:${quantity}:${priority}`);
+}
+
 type LineCheck = {
   rowId: string;
   ok: boolean;
@@ -46,6 +63,10 @@ function ProductionPage() {
   const [exportQtys, setExportQtys] = useState<Record<string, string>>({});
   const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({});
   const [comboSearch, setComboSearch] = useState<Record<string, string>>({});
+  const [validateTarget, setValidateTarget] = useState<{
+    id: string; quantity: number; produced_qty: number; coffretName: string;
+  } | null>(null);
+  const [validateQty, setValidateQty] = useState<string>("");
 
   const coffrets = useQuery({
     queryKey: ["coffrets", "production"],
@@ -121,7 +142,8 @@ function ProductionPage() {
 
       const filtered = ((rawOrders ?? []) as any[]).map((row) => ({
         ...row,
-        status: normalizeProductionStatus(row.status),
+        status:      normalizeProductionStatus(row.status),
+        produced_qty: Number(row.produced_qty ?? 0),
       }));
       const ids = Array.from(new Set(filtered.map((o) => o.coffret_id).filter(Boolean)));
 
@@ -140,28 +162,27 @@ function ProductionPage() {
   });
 
   const createFabrication = useMutation({
+    retry: 0,  // jamais de retry auto : la clé d'idempotence couvre les erreurs réseau
     mutationFn: async () => {
       for (const row of validRows) {
+        const p = urgent ? 1 : 0;
         const { data, error } = await sb.rpc("create_production_order_atomic", {
-          p_coffret_id: row.coffret_id,
-          p_quantity: row.quantity,
-          p_status: urgent ? "draft" : "draft",
-          p_priority: urgent ? 1 : 0,
-          p_notes: null,
-          p_idempotency_key: `production:${row.id}:${row.coffret_id}:${row.quantity}:${urgent ? 1 : 0}`,
+          p_coffret_id:      row.coffret_id,
+          p_quantity:        row.quantity,
+          p_status:          urgent ? "priority" : "draft",
+          p_priority:        p,
+          p_notes:           null,
+          p_idempotency_key: getIdempotencyKey(row.coffret_id, row.quantity, p),
         });
         if (error) throw error;
-
-        if (data && data.success === false) {
-          throw new Error(data.error || "Création production impossible");
-        }
+        if (data && data.success === false) throw new Error(data.error || "Création impossible");
+        clearIdempotencyKey(row.coffret_id, row.quantity, p);
       }
     },
     onSuccess: () => {
-      toast.success("Fabrication créée");
+      toast.success("Fabrication créée — stock réservé");
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
-      // La RPC insère des mouvements OUT : invalider le snapshot de stock
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
       setRows([{ id: crypto.randomUUID(), coffret_id: "", quantity: 1 }]);
       setUrgent(false);
@@ -170,15 +191,14 @@ function ProductionPage() {
   });
 
   const transition = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "in_progress" | "done" }) => {
+    retry: 0,
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const { data, error } = await sb.rpc("transition_production_order_status", {
         p_order_id: id,
-        p_status: status,
+        p_status:   status,
       });
       if (error) throw error;
-      if (data && data.success === false) {
-        throw new Error(data.error || "Transition production impossible");
-      }
+      if (data && data.success === false) throw new Error(data.error || "Transition impossible");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
@@ -188,17 +208,16 @@ function ProductionPage() {
   });
 
   const cancelOrder = useMutation({
+    retry: 0,
     mutationFn: async (id: string) => {
       const { data, error } = await sb.rpc("cancel_production_order_with_unreserve", {
         p_order_id: id,
       });
       if (error) throw error;
-      if (data && data.success === false) {
-        throw new Error(data.error || "Annulation impossible");
-      }
+      if (data && data.success === false) throw new Error(data.error || "Annulation impossible");
     },
     onSuccess: () => {
-      toast.success("Fabrication annulée");
+      toast.success("Fabrication annulée — réservations libérées");
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
@@ -207,20 +226,24 @@ function ProductionPage() {
   });
 
   const finish = useMutation({
-    mutationFn: async (id: string) => {
+    retry: 0,  // idempotent côté SQL mais on n'accepte pas de double soumission
+    mutationFn: async ({ id, qty }: { id: string; qty?: number }) => {
       const { data, error } = await sb.rpc("validate_production_order", {
         p_order_id: id,
+        p_qty:      qty ?? null,
       });
       if (error) throw error;
-      if (data && data.success === false) {
-        throw new Error(data.error || "Validation production impossible");
-      }
+      if (data && data.success === false) throw new Error(data.error || "Validation impossible");
+      return data as { status: string; validated_qty: number; produced_qty: number; total_qty: number };
     },
-    onSuccess: () => {
-      toast.success("Fabrication terminée");
+    onSuccess: (data) => {
+      if (data?.status === "done") toast.success("Fabrication terminée — stock mis à jour");
+      else toast.success(`Validation partielle : ${data?.produced_qty ?? "?"}/${data?.total_qty ?? "?"}`);
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_movements"] });
+      qc.invalidateQueries({ queryKey: ["composant_movements"] });
+      setValidateTarget(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -306,8 +329,70 @@ function ProductionPage() {
     toast.success("Export CSV téléchargé");
   }
 
+  const validateRemaining = validateTarget
+    ? validateTarget.quantity - validateTarget.produced_qty
+    : 0;
+  const validateQtyNum = Math.trunc(Number(validateQty));
+  const validateQtyValid =
+    Number.isFinite(validateQtyNum) && validateQtyNum > 0 && validateQtyNum <= validateRemaining;
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      {/* ── Dialog de validation (totale ou partielle) ── */}
+      <Dialog
+        open={!!validateTarget}
+        onOpenChange={(open) => { if (!open) setValidateTarget(null); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Valider la fabrication</DialogTitle>
+          </DialogHeader>
+          {validateTarget && (
+            <div className="space-y-4">
+              <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm space-y-1">
+                <div className="font-semibold">{validateTarget.coffretName}</div>
+                <div className="text-muted-foreground text-xs">
+                  Déjà produit : {fmtInt(validateTarget.produced_qty)} / {fmtInt(validateTarget.quantity)}
+                  &ensp;·&ensp;Restant : {fmtInt(validateRemaining)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Quantité à valider</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={validateRemaining}
+                  value={validateQty}
+                  onChange={(e) => setValidateQty(e.target.value)}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  Saisir {fmtInt(validateRemaining)} pour terminer l&rsquo;OF complètement.
+                  Un chiffre inférieur crée une validation partielle.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidateTarget(null)}>Annuler</Button>
+            <Button
+              disabled={!validateQtyValid || finish.isPending}
+              onClick={() => validateTarget && finish.mutate({
+                id:  validateTarget.id,
+                qty: validateQtyNum < validateRemaining ? validateQtyNum : undefined,
+              })}
+            >
+              {finish.isPending
+                ? "Validation…"
+                : validateQtyNum === validateRemaining
+                  ? "Terminer l'OF"
+                  : `Valider ${validateQtyNum > 0 ? fmtInt(validateQtyNum) : "?"} / ${fmtInt(validateTarget?.quantity ?? 0)}`
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Production</p>
@@ -527,7 +612,8 @@ function ProductionPage() {
               <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
                 <tr>
                   <th className="text-left p-3">Coffret</th>
-                  <th className="text-right p-3">Quantité</th>
+                  <th className="text-right p-3">Qté</th>
+                  <th className="text-right p-3">Produit</th>
                   <th className="text-center p-3">Priorité</th>
                   <th className="text-center p-3">Statut</th>
                   <th className="text-right p-3">Action</th>
@@ -546,9 +632,10 @@ function ProductionPage() {
                 ) : (orders.data ?? []).map((o: any) => (
                   (() => {
                     const status = String(o.status);
-                    const canStart = status === "draft" || status === "priority";
-                    const canFinish = status === "in_progress";
-                    const canCancel = status === "draft" || status === "priority" || status === "in_progress";
+                    const canStart  = status === "draft" || status === "priority";
+                    const canFinish = status === "in_progress" || status === "partial";
+                    const canCancel = status === "draft" || status === "priority"
+                                   || status === "in_progress" || status === "partial";
                     const snapshot = o.coffret_snapshot as { reference?: string; name?: string } | null;
                     const coffretName = o.coffret?.name ?? snapshot?.name ?? "Coffret archivé";
                     const coffretRef = o.coffret?.reference ?? snapshot?.reference ?? "—";
@@ -560,6 +647,9 @@ function ProductionPage() {
                           <div className="text-xs text-muted-foreground font-mono">{coffretRef}</div>
                         </td>
                         <td className="p-3 text-right tabular font-semibold">{fmtInt(o.quantity)}</td>
+                        <td className="p-3 text-right tabular text-sm text-muted-foreground">
+                          {o.produced_qty > 0 ? fmtInt(o.produced_qty) : <span className="opacity-40">—</span>}
+                        </td>
                         <td className="p-3 text-center">
                           <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${Number(o.priority ?? 0) === 1 ? "border-destructive/30 bg-destructive/15 text-destructive" : "border-border bg-muted text-muted-foreground"}`}>
                             {Number(o.priority ?? 0) === 1 ? "Urgent" : "Normal"}
@@ -578,8 +668,21 @@ function ProductionPage() {
                               </Button>
                             )}
                             {canFinish && (
-                              <Button size="sm" variant="outline" onClick={() => finish.mutate(o.id)} disabled={finish.isPending}>
-                                Terminer
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={finish.isPending}
+                                onClick={() => {
+                                  setValidateQty(String(o.quantity - o.produced_qty));
+                                  setValidateTarget({
+                                    id: o.id,
+                                    quantity: o.quantity,
+                                    produced_qty: o.produced_qty,
+                                    coffretName: o.coffret?.name ?? "—",
+                                  });
+                                }}
+                              >
+                                Valider
                               </Button>
                             )}
                             {canCancel && (

@@ -82,7 +82,7 @@ function Dashboard() {
 
       const activeOrders = ((ordersData ?? []) as any[])
         .map((o) => ({ ...o, status: normalizeProductionStatus(o.status) }))
-        .filter((o) => ["draft", "in_progress", "priority"].includes(String(o.status)));
+        .filter((o) => ["draft", "priority", "in_progress", "partial"].includes(String(o.status)));
 
       const coffretIds = Array.from(new Set(activeOrders.map((o) => o.coffret_id).filter(Boolean)));
       let coffretMap = new Map<string, any>();

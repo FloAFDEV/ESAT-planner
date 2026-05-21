@@ -16,18 +16,21 @@ export async function record_stock_movement(
 ): Promise<void> {
   if (!input.composant_id) throw new Error("composant_id requis");
   if (!Number.isFinite(input.quantity) || input.quantity <= 0)
-    throw new Error("quantity doit être > 0");
+    throw new Error("La quantité doit être > 0");
   if (!["IN", "OUT", "ADJUST"].includes(input.type))
-    throw new Error("type de mouvement invalide");
+    throw new Error("Type de mouvement invalide");
 
-  const { error } = await (supabase as any).from("stock_movements").insert({
+  // INSERT direct dans mouvements (source de vérité).
+  // stock_movements est une VIEW — on n'y insère jamais directement.
+  // Le trigger tg_apply_mouvement met composants.stock à jour automatiquement.
+  const { error } = await (supabase as any).from("mouvements").insert({
     composant_id: input.composant_id,
-    type: input.type,
-    quantity: Math.trunc(input.quantity),
-    reason: input.reason ?? null,
-    source_type: input.source_type ?? null,
-    source_id: input.source_id ?? null,
+    type:         input.type,
+    quantity:     Math.trunc(input.quantity),
+    reason:       input.reason ?? null,
+    source_type:  input.source_type ?? null,
+    source_id:    input.source_id ?? null,
   });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message ?? "Erreur lors de l'enregistrement du mouvement");
 }

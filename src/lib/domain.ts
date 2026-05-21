@@ -1,8 +1,10 @@
 export type ProductionStatus =
   | "draft"
+  | "priority"
   | "in_progress"
+  | "partial"
   | "done"
-  | "priority";
+  | "canceled";
 
 export type ProductionPriority = 0 | 1;
 
@@ -15,10 +17,12 @@ export type LivraisonStatus =
 export type ShipmentStatus = LivraisonStatus;
 
 export const productionStatusMeta: Record<string, { label: string; cls: string }> = {
-  draft: { label: "À produire", cls: "bg-muted text-muted-foreground" },
-  in_progress: { label: "En cours", cls: "bg-info/15 text-info border border-info/30" },
-  done: { label: "Terminé", cls: "bg-success/15 text-success border border-success/30" },
-  priority: { label: "Urgent", cls: "bg-destructive/15 text-destructive border border-destructive/30" },
+  draft:       { label: "À produire",  cls: "bg-muted text-muted-foreground border border-border" },
+  priority:    { label: "Urgent",      cls: "bg-destructive/15 text-destructive border border-destructive/30" },
+  in_progress: { label: "En cours",    cls: "bg-info/15 text-info border border-info/30" },
+  partial:     { label: "Partiel",     cls: "bg-warning/15 text-warning border border-warning/30" },
+  done:        { label: "Terminé",     cls: "bg-success/15 text-success border border-success/30" },
+  canceled:    { label: "Annulé",      cls: "bg-muted/60 text-muted-foreground border border-border line-through" },
 };
 
 export const productionPriorityMeta: Record<ProductionPriority, { label: string; cls: string }> = {
@@ -43,12 +47,16 @@ export const shipmentStatusMeta: Record<string, { label: string; cls: string }> 
 
 export function normalizeProductionStatus(status?: string | null): ProductionStatus {
   const value = String(status ?? "draft");
-  // Source unique : UNIQUEMENT canoniques en production_orders
-  // Les statuts legacy ne doivent jamais être stockés
-  if (value === "draft" || value === "in_progress" || value === "done" || value === "priority") {
-    return value;
-  }
-  // Fallback strict : default à draft si donnée inattendue
+  // Canoniques directs
+  if (
+    value === "draft" || value === "priority" || value === "in_progress" ||
+    value === "partial" || value === "done" || value === "canceled"
+  ) return value;
+  // Legacy → canonical
+  if (value === "annule") return "canceled";
+  if (value === "termine") return "done";
+  if (value === "en_cours" || value === "en_pause") return "in_progress";
+  if (value === "brouillon" || value === "pret") return "draft";
   return "draft";
 }
 
