@@ -263,7 +263,7 @@ function LivraisonsPage() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="sticky top-[88px] md:top-0 z-10 bg-background text-xs uppercase tracking-wider text-muted-foreground">
+                    <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 backdrop-blur text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
                         <th className="text-left p-2">Variant</th>
                         <th className="text-right p-2">Quantité</th>
