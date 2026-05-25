@@ -63,10 +63,12 @@ function StockPage() {
 
   const composants = useQuery({
     queryKey: ["composants"],
+    refetchOnMount: "always",
+    refetchInterval: 10_000,
     queryFn: async () => {
       const { data, error } = await sb
         .from("composants")
-        .select("*")
+        .select("id,reference,name,stock,reserved_stock,min_stock,is_active,deleted_at")
         .is("deleted_at", null)
         .order("reference");
       if (error) throw error;
@@ -481,9 +483,9 @@ function MouvementDialog({
               <Select value={type} onValueChange={(v) => setType(v as "IN" | "OUT" | "ADJUST")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="IN">Entrée (réappro, correction +)</SelectItem>
-                  <SelectItem value="OUT">Sortie (perte, casse, correction −)</SelectItem>
-                  <SelectItem value="ADJUST">Ajustement (inventaire)</SelectItem>
+                  <SelectItem value="IN">Entrée (+) — réapprovisionnement</SelectItem>
+                  <SelectItem value="OUT">Sortie (−) — perte, casse</SelectItem>
+                  <SelectItem value="ADJUST">Inventaire — fixe le stock à cette valeur</SelectItem>
                 </SelectContent>
               </Select>
             </div>

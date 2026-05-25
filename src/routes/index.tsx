@@ -45,6 +45,7 @@ function Dashboard() {
 
   const composants = useQuery({
     queryKey: ["composants"],
+    refetchOnMount: "always",
     refetchInterval: 15000,
     queryFn: async () => {
       const { data, error } = await sb
