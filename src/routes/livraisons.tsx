@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Trash2, Truck, Phone, Mail, MapPin } from "lucide-react";
+import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X } from "lucide-react";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
@@ -34,6 +34,10 @@ function LivraisonsPage() {
   const qc = useQueryClient();
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [shipSearch, setShipSearch] = useState("");
+  const [shipStatus, setShipStatus] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const deleteShipment = useMutation({
     mutationFn: async (id: string) => {
@@ -199,6 +203,26 @@ function LivraisonsPage() {
     },
   });
 
+  const filteredShipments = useMemo(() => {
+    let rows = (shipments.data ?? []) as any[];
+    if (shipStatus !== "all") rows = rows.filter((s) => s.status === shipStatus);
+    if (dateFrom) rows = rows.filter((s) => new Date(s.created_at) >= new Date(dateFrom));
+    if (dateTo)   rows = rows.filter((s) => new Date(s.created_at) <= new Date(dateTo + "T23:59:59"));
+    const q = shipSearch.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((s) =>
+        (s.client_entity?.name  ?? "").toLowerCase().includes(q) ||
+        (s.reference            ?? "").toLowerCase().includes(q) ||
+        (s.client_entity?.city  ?? "").toLowerCase().includes(q) ||
+        (s.client_entity?.address ?? "").toLowerCase().includes(q) ||
+        String(s.total_weight   ?? "").includes(q)
+      );
+    }
+    return rows;
+  }, [shipments.data, shipSearch, shipStatus, dateFrom, dateTo]);
+
+  const activeFilters = (shipStatus !== "all" ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (shipSearch.trim() ? 1 : 0);
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <header className="mb-6 flex items-end justify-between flex-wrap gap-3">
@@ -220,11 +244,86 @@ function LivraisonsPage() {
         commercialOrders={(commercialOrders.data ?? []) as any[]}
       />
 
+      {/* Filter bar */}
+      <div className="mb-4 flex flex-wrap items-end gap-2">
+        {/* Text search */}
+        <div className="relative w-full sm:w-60">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            value={shipSearch}
+            onChange={(e) => setShipSearch(e.target.value)}
+            placeholder="Client, référence, ville…"
+            className="pl-8 pr-7 h-9 text-sm"
+          />
+          {shipSearch && (
+            <button onClick={() => setShipSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Status */}
+        <Select value={shipStatus} onValueChange={setShipStatus}>
+          <SelectTrigger className="h-9 w-40 text-sm">
+            <SelectValue placeholder="Statut" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les statuts</SelectItem>
+            <SelectItem value="draft">À expédier</SelectItem>
+            <SelectItem value="ready">Prêt</SelectItem>
+            <SelectItem value="shipped">Expédié</SelectItem>
+            <SelectItem value="delivered">Livré</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Date range */}
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            title="Date de début"
+            className="h-9 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <span className="text-xs text-muted-foreground">→</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            title="Date de fin"
+            className="h-9 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+
+        {/* Reset button */}
+        {activeFilters > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 text-muted-foreground hover:text-foreground gap-1.5"
+            onClick={() => { setShipSearch(""); setShipStatus("all"); setDateFrom(""); setDateTo(""); }}
+          >
+            <X className="h-3.5 w-3.5" />
+            Réinitialiser ({activeFilters})
+          </Button>
+        )}
+
+        {/* Result count */}
+        {shipments.data && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {filteredShipments.length} / {(shipments.data as any[]).length} expéditions
+          </span>
+        )}
+      </div>
+
       <div className="grid gap-4">
         {(shipments.data ?? []).length === 0 && (
           <Card><CardContent className="py-12 text-center text-muted-foreground text-sm">Aucun shipment pour le moment.</CardContent></Card>
         )}
-        {(shipments.data ?? []).map((s: any) => {
+        {filteredShipments.length === 0 && (shipments.data ?? []).length > 0 && (
+          <Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Aucune expédition ne correspond aux filtres.</CardContent></Card>
+        )}
+        {filteredShipments.map((s: any) => {
           const status = String(s.status);
           const canPrepare = status === "draft";
           const canLoad = status === "ready";

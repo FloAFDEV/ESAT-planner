@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2, X } from "lucide-react";
 import { fmtInt } from "@/lib/format";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 
@@ -49,6 +49,7 @@ function CoffretsPage() {
   const [newCompPoids, setNewCompPoids] = useState("0");
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [coffretSearch, setCoffretSearch] = useState("");
 
   const coffrets = useQuery({
     queryKey: ["coffrets", "manage"],
@@ -123,6 +124,15 @@ function CoffretsPage() {
   }, [coffrets.data, selectedId]);
 
   const activeCoffret = useMemo(() => (coffrets.data ?? []).find((c) => c.id === selectedId), [coffrets.data, selectedId]);
+
+  const filteredCoffrets = useMemo(() => {
+    const q = coffretSearch.trim().toLowerCase();
+    if (!q) return coffrets.data ?? [];
+    return (coffrets.data ?? []).filter((c: any) =>
+      (c.reference ?? "").toLowerCase().includes(q) ||
+      (c.name ?? "").toLowerCase().includes(q)
+    );
+  }, [coffrets.data, coffretSearch]);
 
   // ─── Mutations ──────────────────────────────────────────────────────────────
 
@@ -280,10 +290,34 @@ function CoffretsPage() {
       <div className="grid lg:grid-cols-4 gap-3">
         {/* Coffret list */}
         <Card className="lg:col-span-1">
-          <CardHeader><CardTitle className="text-base">Coffrets ({(coffrets.data ?? []).length})</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Coffrets ({filteredCoffrets.length}{coffretSearch.trim() ? `/${(coffrets.data ?? []).length}` : ""})
+            </CardTitle>
+            <div className="relative mt-1.5">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={coffretSearch}
+                onChange={(e) => setCoffretSearch(e.target.value)}
+                placeholder="Référence ou nom…"
+                className="pl-8 pr-7 h-8 text-xs"
+              />
+              {coffretSearch && (
+                <button
+                  onClick={() => setCoffretSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[70vh] overflow-y-auto">
-              {(coffrets.data ?? []).map((c) => (
+            <div className="max-h-[65vh] overflow-y-auto">
+              {filteredCoffrets.length === 0 && (
+                <p className="px-3 py-4 text-xs text-muted-foreground text-center">Aucun coffret trouvé.</p>
+              )}
+              {filteredCoffrets.map((c: any) => (
                 <button
                   key={c.id}
                   onClick={() => setSelectedId(c.id)}

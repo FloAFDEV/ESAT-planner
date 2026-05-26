@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info, Search, Trash2, X } from "lucide-react";
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { record_stock_movement } from "@/lib/stockMovements";
 import { getStockHealth, stockHealthMeta, type StockHealth } from "@/lib/domain";
@@ -56,6 +56,7 @@ function StockPage() {
   const [presetType, setPresetType] = useState<"IN" | "OUT" | "ADJUST">("IN");
   const [presetReason, setPresetReason] = useState<string>("");
   const [filter, setFilter] = useState<"all" | "rupture" | "critical" | "ok">("all");
+  const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; reference: string; name: string; stock: number } | null>(null);
   const [deleteCode, setDeleteCode] = useState<string>("");
@@ -92,11 +93,11 @@ function StockPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  function openDeleteDialog(c: { id: string; reference: string; name: string; stockActuel: number }) {
+  function openDeleteDialog(c: StockRow) {
     const code = String(Math.floor(1000 + Math.random() * 9000));
     setDeleteCode(code);
     setDeleteInput("");
-    setDeleteTarget({ id: c.id, reference: c.reference, name: c.name, stock: c.stockActuel });
+    setDeleteTarget({ id: c.id, reference: c.reference ?? "", name: c.name ?? "", stock: c.stockActuel });
   }
 
   const stockRows = useMemo<StockRow[]>(() => {
@@ -110,9 +111,16 @@ function StockPage() {
   }, [composants.data]);
 
   const filteredRows = useMemo<StockRow[]>(() => {
-    if (filter === "all") return stockRows;
-    return stockRows.filter((row) => row.health === filter);
-  }, [filter, stockRows]);
+    let rows = filter === "all" ? stockRows : stockRows.filter((r) => r.health === filter);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) =>
+        (r.reference ?? "").toLowerCase().includes(q) ||
+        (r.name ?? "").toLowerCase().includes(q)
+      );
+    }
+    return rows;
+  }, [filter, search, stockRows]);
 
   const counts = useMemo(() => ({
     all: stockRows.length,
@@ -157,6 +165,23 @@ function StockPage() {
               {label} ({count})
             </Button>
           ))}
+          <div className="relative ml-auto w-full sm:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Référence ou désignation…"
+              className="pl-8 pr-7 h-8 text-xs"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Stock table */}
