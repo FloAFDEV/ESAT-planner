@@ -90,11 +90,11 @@ function StockPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  function openDeleteDialog(c: { id: string; reference: string; name: string; stockActuel: number }) {
+  function openDeleteDialog(c: StockRow) {
     const code = String(Math.floor(1000 + Math.random() * 9000));
     setDeleteCode(code);
     setDeleteInput("");
-    setDeleteTarget({ id: c.id, reference: c.reference, name: c.name, stock: c.stockActuel });
+    setDeleteTarget({ id: c.id, reference: c.reference ?? "", name: c.name ?? "", stock: c.stockActuel });
   }
 
   const stockRows = useMemo<StockRow[]>(() => {
@@ -332,10 +332,14 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
       const orderIds = rows.map((r: any) => r.production_order_id).filter(Boolean);
       const { data: orders } = await sb
         .from("production_orders")
-        .select("id, reference, status")
+        .select("id, reference, status, coffret_snapshot")
         .in("id", orderIds);
-      const orderMap = new Map((orders ?? []).map((o: any) => [o.id, o]));
-      return rows.map((r: any) => ({ ...r, order: orderMap.get(r.production_order_id) ?? null }));
+      const orderMap = new Map<string, any>((orders ?? []).map((o: any) => [o.id as string, o]));
+      return rows.map((r: any) => {
+        const order: any = orderMap.get(r.production_order_id) ?? null;
+        const snap = (order?.coffret_snapshot ?? {}) as { reference?: string; name?: string };
+        return { ...r, order, coffretRef: snap.reference ?? null, coffretName: snap.name ?? null };
+      });
     },
   });
 
@@ -353,10 +357,19 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
         ) : (
           <div className="space-y-1.5">
             {(reservations.data ?? []).map((r: any) => (
-              <div key={r.production_order_id} className="flex items-center justify-between rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 px-3 py-1.5 text-xs">
-                <span className="font-mono font-medium">{r.order?.reference ?? r.production_order_id?.slice(0, 8)}</span>
-                <span className="ml-3 text-muted-foreground capitalize">{r.order?.status ?? "—"}</span>
-                <span className="ml-auto font-semibold">{fmtInt(r.quantity)} unités</span>
+              <div key={r.production_order_id} className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 px-3 py-2 text-xs space-y-0.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono font-medium">{r.order?.reference ?? r.production_order_id?.slice(0, 8)}</span>
+                  <span className="font-semibold tabular shrink-0">{fmtInt(r.quantity)} unités</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                  {(r.coffretRef || r.coffretName) ? (
+                    <span className="font-mono truncate">{[r.coffretRef, r.coffretName].filter(Boolean).join(" · ")}</span>
+                  ) : (
+                    <span className="italic">Coffret inconnu</span>
+                  )}
+                  <span className="capitalize shrink-0">{r.order?.status ?? "—"}</span>
+                </div>
               </div>
             ))}
           </div>
