@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ChevronsUpDown, FileDown } from "lucide-react";
+import { AlertTriangle, ChevronsUpDown, FileDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { fmtInt } from "@/lib/format";
 import { normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 
 type ProdRow = { id: string; coffret_id: string; quantity: number };
@@ -124,12 +125,13 @@ function ProductionPage() {
   }, [lineChecks.data]);
 
   const validRows = rows.filter((r) => r.coffret_id && r.quantity > 0);
+  // Autorise la création dès que les checks ont chargé, même avec stock insuffisant.
+  // La faisabilité est affichée visuellement mais ne bloque plus la création (planification anticipée).
+  // P0.3 (transition → in_progress) constitue la garde d'exécution.
   const canCreate =
     validRows.length > 0 &&
-    validRows.every((row) => {
-      const check = checksByRow.get(row.id);
-      return check?.ok;
-    });
+    !lineChecks.isLoading &&
+    validRows.every((row) => !!checksByRow.get(row.id));
 
   const orders = useQuery({
     queryKey: ["production_orders", "atelier"],
@@ -164,6 +166,7 @@ function ProductionPage() {
   const createFabrication = useMutation({
     retry: 0,  // jamais de retry auto : la clé d'idempotence couvre les erreurs réseau
     mutationFn: async () => {
+      const results: Array<{ can_start_now: boolean }> = [];
       for (const row of validRows) {
         const p = urgent ? 1 : 0;
         const { data, error } = await sb.rpc("create_production_order_atomic", {
@@ -177,10 +180,17 @@ function ProductionPage() {
         if (error) throw error;
         if (data && data.success === false) throw new Error(data.error || "Création impossible");
         clearIdempotencyKey(row.coffret_id, row.quantity, p);
+        results.push({ can_start_now: data?.can_start_now !== false });
       }
+      return results;
     },
-    onSuccess: () => {
-      toast.success("Fabrication créée — stock réservé");
+    onSuccess: (results) => {
+      const hasDeficit = results.some((r) => !r.can_start_now);
+      if (hasDeficit) {
+        toast.warning("OF planifié — stock insuffisant au moment de la création (voir liste)");
+      } else {
+        toast.success("Fabrication créée — stock réservé");
+      }
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
@@ -337,6 +347,7 @@ function ProductionPage() {
     Number.isFinite(validateQtyNum) && validateQtyNum > 0 && validateQtyNum <= validateRemaining;
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
       {/* ── Dialog de validation (totale ou partielle) ── */}
       <Dialog
@@ -448,14 +459,22 @@ function ProductionPage() {
           {rows.map((row, idx) => {
             const check = checksByRow.get(row.id);
             const feasible = check?.ok === true;
+            const hasMissing = !feasible && check && check.missing.length > 0;
+            const notConfigured = !feasible && check && check.missing.length === 0;
 
             const statusCls = feasible
               ? "bg-success/15 text-success border border-success/30"
-              : "bg-destructive/15 text-destructive border border-destructive/30";
+              : hasMissing
+                ? "bg-warning/15 text-warning border border-warning/30"
+                : "bg-destructive/15 text-destructive border border-destructive/30";
 
             const statusTxt = feasible
               ? "Fabrication possible"
-              : "Fabrication impossible";
+              : hasMissing
+                ? `${check.missing.length} pièce${check.missing.length > 1 ? "s" : ""} manquante${check.missing.length > 1 ? "s" : ""}`
+                : notConfigured
+                  ? "Nomenclature manquante"
+                  : "—";
 
             return (
               <div key={row.id} className="rounded-md border border-border p-3 space-y-3">
@@ -596,8 +615,24 @@ function ProductionPage() {
             <Switch checked={urgent} onCheckedChange={setUrgent} />
           </div>
 
+          {validRows.some((r) => {
+            const c = checksByRow.get(r.id);
+            return c && !c.ok && c.missing.length > 0;
+          }) && (
+            <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                Certains composants manquent. L'OF sera planifié avec des réservations en déficit —
+                le démarrage sera bloqué tant que le stock n'est pas réapprovisionné.
+              </span>
+            </div>
+          )}
+
           <Button className="w-full" onClick={() => createFabrication.mutate()} disabled={!canCreate || createFabrication.isPending}>
-            Créer fabrication
+            {validRows.some((r) => {
+              const c = checksByRow.get(r.id);
+              return c && !c.ok && c.missing.length > 0;
+            }) ? "Planifier (stock insuffisant)" : "Créer fabrication"}
           </Button>
         </CardContent>
       </Card>
@@ -656,9 +691,24 @@ function ProductionPage() {
                           </span>
                         </td>
                         <td className="p-3 text-center">
-                          <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground border border-border"}`}>
-                            {productionStatusMeta[status]?.label ?? "Statut inconnu"}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground border border-border"}`}>
+                              {productionStatusMeta[status]?.label ?? "Statut inconnu"}
+                            </span>
+                            {o.can_start_now === false && canStart && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 rounded-sm border border-warning/30 bg-warning/15 text-warning px-2 py-0.5 text-[11px] font-medium cursor-help">
+                                    <AlertTriangle className="h-3 w-3" /> Déficit stock
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-[240px] text-xs">
+                                  Stock insuffisant lors de la planification — état au moment de la création.
+                                  Réapprovisionner avant de démarrer.
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-right">
                           <div className="inline-flex gap-1.5">
@@ -702,5 +752,6 @@ function ProductionPage() {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   );
 }
