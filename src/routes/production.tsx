@@ -74,6 +74,7 @@ function ProductionPage() {
   const [deleteOfCode, setDeleteOfCode] = useState<string>("");
   const [deleteOfInput, setDeleteOfInput] = useState<string>("");
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveOpenedAt, setArchiveOpenedAt] = useState<Date | null>(null);
   const [archivePeriod, setArchivePeriod] = useState<"3m" | "6m" | "1an" | "tout">("3m");
   const [archiveIncludeDone, setArchiveIncludeDone] = useState(true);
   const [archiveIncludeCanceled, setArchiveIncludeCanceled] = useState(true);
@@ -151,7 +152,8 @@ function ProductionPage() {
       const { data: rawOrders, error } = await sb
         .from("production_orders")
         .select("*, coffret_snapshot")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(200);
       if (error) throw error;
 
       const filtered = ((rawOrders ?? []) as any[]).map((row) => ({
@@ -280,16 +282,19 @@ function ProductionPage() {
     const code = String(Math.floor(1000 + Math.random() * 9000));
     setArchiveCode(code);
     setArchiveInput("");
+    const now = new Date();
+    setArchiveOpenedAt(now);
+    qc.invalidateQueries({ queryKey: ["production_orders", "atelier"] });
     setArchiveOpen(true);
   }
 
   const archiveBefore = useMemo<string | null>(() => {
-    const now = new Date();
-    if (archivePeriod === "3m") { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d.toISOString(); }
-    if (archivePeriod === "6m") { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d.toISOString(); }
-    if (archivePeriod === "1an") { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d.toISOString(); }
+    const ref = archiveOpenedAt ?? new Date();
+    if (archivePeriod === "3m") { const d = new Date(ref); d.setMonth(d.getMonth() - 3); return d.toISOString(); }
+    if (archivePeriod === "6m") { const d = new Date(ref); d.setMonth(d.getMonth() - 6); return d.toISOString(); }
+    if (archivePeriod === "1an") { const d = new Date(ref); d.setFullYear(d.getFullYear() - 1); return d.toISOString(); }
     return null;
-  }, [archivePeriod]);
+  }, [archivePeriod, archiveOpenedAt]);
 
   const archiveStatuses = useMemo(() => {
     const s: string[] = [];
@@ -329,6 +334,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       setArchiveOpen(false);
       setArchiveInput("");
+      setArchiveOpenedAt(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1000,7 +1006,7 @@ function ProductionPage() {
     </div>
 
     {/* ── Dialog archivage en masse ── */}
-    <Dialog open={archiveOpen} onOpenChange={(open) => { if (!open) { setArchiveOpen(false); setArchiveInput(""); } }}>
+    <Dialog open={archiveOpen} onOpenChange={(open) => { if (!open) { setArchiveOpen(false); setArchiveInput(""); setArchiveOpenedAt(null); } }}>
       <DialogContent className="max-w-md" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Archiver les fabrications</DialogTitle>
@@ -1045,6 +1051,7 @@ function ProductionPage() {
                 ? "Aucun statut sélectionné"
                 : [archiveIncludeDone ? "Terminés" : null, archiveIncludeCanceled ? "Annulés" : null].filter(Boolean).join(" + ")}
             </div>
+            <div className="text-xs text-muted-foreground/70 mt-1">Aperçu basé sur les 200 derniers OFs chargés. L'archivage côté serveur traite l'intégralité.</div>
           </div>
           {(archivePeriod === "1an" || archivePeriod === "tout") && archivePreview.length > 0 && (
             <Button
@@ -1077,7 +1084,7 @@ function ProductionPage() {
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => { setArchiveOpen(false); setArchiveInput(""); }}>Annuler</Button>
+          <Button variant="outline" onClick={() => { setArchiveOpen(false); setArchiveInput(""); setArchiveOpenedAt(null); }}>Annuler</Button>
           <Button
             variant="destructive"
             disabled={

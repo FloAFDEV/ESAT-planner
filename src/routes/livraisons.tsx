@@ -108,45 +108,53 @@ function LivraisonsPage() {
   const shipments = useQuery({
     queryKey: ["shipments"],
     queryFn: async () => {
+      // Round 1: base shipments
       const { data: shipmentRows, error } = await sb
         .from("shipments")
         .select("id,reference,client_id,total_weight,total_pallets,status,created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const shipmentIds = ((shipmentRows ?? []) as any[]).map((s) => s.id);
-      const clientIds = Array.from(new Set(((shipmentRows ?? []) as any[]).map((s) => s.client_id).filter(Boolean)));
+      const rows = (shipmentRows ?? []) as any[];
+      const shipmentIds = rows.map((s) => s.id);
+      const clientIds = Array.from(new Set(rows.map((s) => s.client_id).filter(Boolean)));
 
-      let clientMap = new Map<string, any>();
-      if (clientIds.length > 0) {
-        const { data: clientsData, error: clientsError } = await sb
-          .from("clients")
-          .select("id,name,contact_name,phone,email,address,city,postal_code,country")
-          .in("id", clientIds);
-        if (clientsError) throw clientsError;
-        clientMap = new Map((clientsData ?? []).map((c: any) => [c.id, c]));
-      }
+      // Round 2: clients + lines + pallets in parallel
+      const [clientsResult, linesResult, palletsResult] = await Promise.all([
+        clientIds.length > 0
+          ? sb.from("clients").select("id,name,contact_name,phone,email,address,city,postal_code,country").in("id", clientIds)
+          : Promise.resolve({ data: [], error: null }),
+        shipmentIds.length > 0
+          ? sb.from("shipment_lines").select("id,shipment_id,product_variant_id,quantity,weight").in("shipment_id", shipmentIds)
+          : Promise.resolve({ data: [], error: null }),
+        shipmentIds.length > 0
+          ? sb.from("shipment_pallets").select("id,shipment_id,label,type,weight,width,height,depth").in("shipment_id", shipmentIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (clientsResult.error) throw clientsResult.error;
+      if (linesResult.error) throw linesResult.error;
+      if (palletsResult.error) throw palletsResult.error;
 
-      let lineRows: any[] = [];
-      if (shipmentIds.length > 0) {
-        const { data, error: lineError } = await sb
-          .from("shipment_lines")
-          .select("id,shipment_id,product_variant_id,quantity,weight")
-          .in("shipment_id", shipmentIds);
-        if (lineError) throw lineError;
-        lineRows = data ?? [];
-      }
+      const clientMap = new Map<string, any>((clientsResult.data ?? []).map((c: any) => [c.id, c]));
+      const lineRows: any[] = linesResult.data ?? [];
+      const palletRows: any[] = palletsResult.data ?? [];
 
       const variantIds = Array.from(new Set(lineRows.map((l) => l.product_variant_id).filter(Boolean)));
-      let variantMap = new Map<string, any>();
-      if (variantIds.length > 0) {
-        const { data: variantsData, error: variantsError } = await sb
-          .from("product_variants")
-          .select("id,reference,name,weight")
-          .in("id", variantIds);
-        if (variantsError) throw variantsError;
-        variantMap = new Map((variantsData ?? []).map((v: any) => [v.id, v]));
-      }
+      const palletIds = palletRows.map((p) => p.id).filter(Boolean);
+
+      // Round 3: product_variants + pallet_lines in parallel
+      const [variantsResult, palletLinesResult] = await Promise.all([
+        variantIds.length > 0
+          ? sb.from("product_variants").select("id,reference,name,weight").in("id", variantIds)
+          : Promise.resolve({ data: [], error: null }),
+        palletIds.length > 0
+          ? sb.from("shipment_pallet_lines").select("id,pallet_id,shipment_line_id,quantity").in("pallet_id", palletIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (variantsResult.error) throw variantsResult.error;
+      if (palletLinesResult.error) throw palletLinesResult.error;
+
+      const variantMap = new Map<string, any>((variantsResult.data ?? []).map((v: any) => [v.id, v]));
 
       const linesByShipment = new Map<string, any[]>();
       for (const line of lineRows) {
@@ -155,39 +163,22 @@ function LivraisonsPage() {
         linesByShipment.set(line.shipment_id, current);
       }
 
-      let palletRows: any[] = [];
       const palletsByShipment = new Map<string, any[]>();
-      if (shipmentIds.length > 0) {
-        const { data, error: palletError } = await sb
-          .from("shipment_pallets")
-          .select("id,shipment_id,label,type,weight,width,height,depth")
-          .in("shipment_id", shipmentIds);
-        if (palletError) throw palletError;
-        palletRows = data ?? [];
-        for (const pallet of palletRows) {
-          const current = palletsByShipment.get(pallet.shipment_id) ?? [];
-          current.push(pallet);
-          palletsByShipment.set(pallet.shipment_id, current);
-        }
+      for (const pallet of palletRows) {
+        const current = palletsByShipment.get(pallet.shipment_id) ?? [];
+        current.push(pallet);
+        palletsByShipment.set(pallet.shipment_id, current);
       }
 
-      const palletIds = palletRows.map((p) => p.id).filter(Boolean);
-      let palletLineMap = new Map<string, any[]>();
-      if (palletIds.length > 0) {
-        const { data: palletLinRows, error: palletLineError } = await sb
-          .from("shipment_pallet_lines")
-          .select("id,pallet_id,shipment_line_id,quantity")
-          .in("pallet_id", palletIds);
-        if (palletLineError) throw palletLineError;
-        for (const pl of (palletLinRows ?? []) as any[]) {
-          const current = palletLineMap.get(pl.pallet_id) ?? [];
-          current.push(pl);
-          palletLineMap.set(pl.pallet_id, current);
-        }
+      const palletLineMap = new Map<string, any[]>();
+      for (const pl of (palletLinesResult.data ?? []) as any[]) {
+        const current = palletLineMap.get(pl.pallet_id) ?? [];
+        current.push(pl);
+        palletLineMap.set(pl.pallet_id, current);
       }
 
-      return ((shipmentRows ?? []) as any[]).map((s) => {
-        const shipmentPallets = (palletsByShipment.get(s.id) ?? []).map((p) => ({
+      return rows.map((s) => {
+        const shipmentPallets = (palletsByShipment.get(s.id) ?? []).map((p: any) => ({
           ...p,
           pallet_lines: palletLineMap.get(p.id) ?? [],
         }));

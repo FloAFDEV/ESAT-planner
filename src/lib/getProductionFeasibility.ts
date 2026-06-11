@@ -57,21 +57,34 @@ export async function getProductionFeasibility(
   const composantIds = Array.from(neededByComposant.keys());
   if (composantIds.length === 0) return empty;
 
-  // Read stock directly from composants (stock − reserved_stock = disponible)
-  const { data: composantRows, error: composantError } = await sb
-    .from("composants")
-    .select("id,name,stock,reserved_stock")
-    .in("id", composantIds);
-  if (composantError) throw composantError;
+  // Read stock + real-time reservations in parallel for conservative available calculation
+  const [composantResult, reservationsResult] = await Promise.all([
+    sb.from("composants").select("id,name,stock,reserved_stock").in("id", composantIds),
+    sb.from("stock_reservations").select("composant_id,quantity").in("composant_id", composantIds),
+  ]);
+  if (composantResult.error) throw composantResult.error;
+  if (reservationsResult.error) throw reservationsResult.error;
+
+  // Sum real-time reservations per composant
+  const realtimeReserved = new Map<string, number>();
+  for (const r of (reservationsResult.data ?? []) as Array<{ composant_id: string; quantity: number }>) {
+    realtimeReserved.set(r.composant_id, (realtimeReserved.get(r.composant_id) ?? 0) + Number(r.quantity ?? 0));
+  }
 
   const byId = new Map<string, { name: string; available: number }>(
-    (composantRows ?? []).map((row: any) => [
-      row.id,
-      {
-        name: String(row.name ?? "Inconnu"),
-        available: Math.max(0, Number(row.stock ?? 0) - Number(row.reserved_stock ?? 0)),
-      },
-    ])
+    (composantResult.data ?? []).map((row: any) => {
+      const cachedReserved = Number(row.reserved_stock ?? 0);
+      const realtimeRes = realtimeReserved.get(row.id) ?? 0;
+      // Use the larger of the two to stay conservative when the trigger cache drifts
+      const reserved = Math.max(cachedReserved, realtimeRes);
+      return [
+        row.id,
+        {
+          name: String(row.name ?? "Inconnu"),
+          available: Math.max(0, Number(row.stock ?? 0) - reserved),
+        },
+      ];
+    })
   );
 
   const components = composantIds.map((composantId) => {
