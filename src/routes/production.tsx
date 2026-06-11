@@ -354,11 +354,20 @@ function ProductionPage() {
         fabricLines.push(`${o.reference ?? o.id.slice(0, 8)};${coffretRef};${coffretName};${o.quantity};${o.produced_qty ?? 0};${statusLabel};${(o.created_at ?? "").slice(0, 10)}`);
       }
 
-      const { data: consumData, error: consumError } = await sb
-        .from("production_consumption")
-        .select("production_order_id, quantity, composant:composants(reference, name)")
-        .in("production_order_id", orderIds);
-      if (consumError) throw consumError;
+      // P0.4 — batcher les UUIDs par tranches de 100 pour éviter HTTP 414.
+      // PostgREST sérialise .in() en query-string GET ; au-delà de ~250 UUIDs
+      // (≈9 KB) la requête dépasse la limite nginx et échoue silencieusement.
+      const CONSUMPTION_BATCH = 100;
+      let allConsumData: any[] = [];
+      for (let i = 0; i < orderIds.length; i += CONSUMPTION_BATCH) {
+        const batch = orderIds.slice(i, i + CONSUMPTION_BATCH);
+        const { data: batchData, error: batchError } = await sb
+          .from("production_consumption")
+          .select("production_order_id, quantity, composant:composants(reference, name)")
+          .in("production_order_id", batch);
+        if (batchError) throw batchError;
+        if (batchData) allConsumData = allConsumData.concat(batchData);
+      }
 
       const orderRefMap = new Map((archivePreview as any[]).map((o: any) => [o.id as string, o.reference ?? (o.id as string).slice(0, 8)]));
       const consumLines: string[] = [
@@ -366,7 +375,7 @@ function ProductionPage() {
         "=== 2. CONSOMMATIONS ===",
         "Référence OF;Réf. composant;Nom composant;Quantité consommée",
       ];
-      for (const c of (consumData ?? []) as any[]) {
+      for (const c of allConsumData) {
         const ofRef = orderRefMap.get(c.production_order_id) ?? (c.production_order_id as string).slice(0, 8);
         consumLines.push(`${ofRef};${c.composant?.reference ?? "—"};${c.composant?.name ?? "—"};${c.quantity}`);
       }
