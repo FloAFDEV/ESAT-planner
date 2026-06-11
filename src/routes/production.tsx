@@ -370,7 +370,7 @@ function ProductionPage() {
         open={!!validateTarget}
         onOpenChange={(open) => { if (!open) setValidateTarget(null); }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Valider la fabrication</DialogTitle>
           </DialogHeader>
@@ -431,7 +431,7 @@ function ProductionPage() {
       </header>
 
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Export pièces manquantes</DialogTitle>
           </DialogHeader>
