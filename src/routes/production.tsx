@@ -371,9 +371,11 @@ function ProductionPage() {
         consumLines.push(`${ofRef};${c.composant?.reference ?? "—"};${c.composant?.name ?? "—"};${c.quantity}`);
       }
 
+      // P0.2 — exclure les composants supprimés (soft-delete) du snapshot stock
       const { data: stockData, error: stockError } = await sb
         .from("composants")
         .select("reference, name, stock, reserved_stock")
+        .is("deleted_at", null)
         .order("reference");
       if (stockError) throw stockError;
 
@@ -387,16 +389,25 @@ function ProductionPage() {
         stockLines.push(`${c.reference};${c.name};${c.stock};${c.reserved_stock ?? 0};${dispo}`);
       }
 
+      // P0.3 — filtrer les expéditions côté serveur pour éviter la troncature
+      // silencieuse à 1000 lignes (limite PostgREST par défaut).
+      // On passe la date limite directement dans la requête SQL ;
+      // pour le mode "tout" (cutoff=null), on applique un .limit(5000) explicite
+      // qui remplace le plafond par défaut de 1000.
       const shipLines: string[] = ["", "=== 4. EXPÉDITIONS ===", "Référence;Client;Statut;Date création"];
-      const { data: shipData, error: shipError } = await sb
+      let shipQuery = (sb as any)
         .from("shipments")
         .select("reference, status, created_at, client:clients(name)")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(5000);
+      if (cutoff) {
+        shipQuery = shipQuery.lt("created_at", cutoff);
+      }
+      const { data: shipData, error: shipError } = await shipQuery;
       if (shipError) {
         shipLines.push("(données non disponibles)");
       } else {
         for (const s of (shipData ?? []) as any[]) {
-          if (cutoff && new Date(s.created_at) >= new Date(cutoff)) continue;
           shipLines.push(`${s.reference ?? "—"};${(s.client as any)?.name ?? "—"};${s.status ?? "—"};${(s.created_at ?? "").slice(0, 10)}`);
         }
       }
