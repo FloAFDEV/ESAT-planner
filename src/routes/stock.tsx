@@ -13,7 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info, Search, Trash2, X } from "lucide-react";
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { record_stock_movement } from "@/lib/stockMovements";
-import { getStockHealth, stockHealthMeta, type StockHealth } from "@/lib/domain";
+import { getStockHealth, normalizeProductionStatus, productionStatusMeta, stockHealthMeta, type StockHealth } from "@/lib/domain";
 
 type StockRow = {
   id: string;
@@ -393,9 +393,15 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
                   {(r.coffretRef || r.coffretName) ? (
                     <span className="font-mono truncate">{[r.coffretRef, r.coffretName].filter(Boolean).join(" · ")}</span>
                   ) : (
-                    <span className="italic">Coffret inconnu</span>
+                    <span className="italic">Coffret archivé</span>
                   )}
-                  <span className="capitalize shrink-0">{r.order?.status ?? "—"}</span>
+                  {r.order?.status ? (
+                    <span className={`shrink-0 inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${productionStatusMeta[normalizeProductionStatus(r.order.status)]?.cls ?? "bg-muted text-muted-foreground border-border"}`}>
+                      {productionStatusMeta[normalizeProductionStatus(r.order.status)]?.label ?? r.order.status}
+                    </span>
+                  ) : (
+                    <span className="shrink-0">—</span>
+                  )}
                 </div>
               </div>
             ))}
