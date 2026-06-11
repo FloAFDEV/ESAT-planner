@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronsUpDown, FileDown } from "lucide-react";
+import { AlertTriangle, ChevronsUpDown, FileDown, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -231,6 +231,22 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteOrder = useMutation({
+    retry: 0,
+    mutationFn: async (id: string) => {
+      const { data, error } = await sb.rpc("delete_canceled_production_order", {
+        p_order_id: id,
+      });
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.error || "Suppression impossible");
+    },
+    onSuccess: () => {
+      toast.success("Fabrication supprimée");
+      qc.invalidateQueries({ queryKey: ["production_orders"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -739,6 +755,22 @@ function ProductionPage() {
                               <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => cancelOrder.mutate(o.id)} disabled={cancelOrder.isPending}>
                                 Annuler
                               </Button>
+                            )}
+                            {status === "canceled" && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => deleteOrder.mutate(o.id)}
+                                    disabled={deleteOrder.isPending}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-xs">Supprimer définitivement</TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                         </td>
