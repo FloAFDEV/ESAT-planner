@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -68,6 +69,9 @@ function ProductionPage() {
     id: string; quantity: number; produced_qty: number; coffretName: string;
   } | null>(null);
   const [validateQty, setValidateQty] = useState<string>("");
+  const [deleteOfTarget, setDeleteOfTarget] = useState<{ id: string; reference: string; coffretName: string } | null>(null);
+  const [deleteOfCode, setDeleteOfCode] = useState<string>("");
+  const [deleteOfInput, setDeleteOfInput] = useState<string>("");
 
   const coffrets = useQuery({
     queryKey: ["coffrets", "production"],
@@ -247,9 +251,22 @@ function ProductionPage() {
     onSuccess: () => {
       toast.success("Fabrication supprimée");
       qc.invalidateQueries({ queryKey: ["production_orders"] });
+      setDeleteOfTarget(null);
+      setDeleteOfInput("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  function openDeleteOfDialog(o: { id: string; reference?: string; coffret?: { name?: string } | null; coffret_snapshot?: { name?: string } | null }) {
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    setDeleteOfCode(code);
+    setDeleteOfInput("");
+    setDeleteOfTarget({
+      id: o.id,
+      reference: o.reference ?? o.id.slice(0, 8),
+      coffretName: (o.coffret as any)?.name ?? (o.coffret_snapshot as any)?.name ?? "Coffret archivé",
+    });
+  }
 
   const finish = useMutation({
     retry: 0,  // idempotent côté SQL mais on n'accepte pas de double soumission
@@ -763,8 +780,7 @@ function ProductionPage() {
                                     size="sm"
                                     variant="outline"
                                     className="text-destructive hover:text-destructive"
-                                    onClick={() => deleteOrder.mutate(o.id)}
-                                    disabled={deleteOrder.isPending}
+                                    onClick={() => openDeleteOfDialog(o)}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
@@ -784,6 +800,52 @@ function ProductionPage() {
         </CardContent>
       </Card>
     </div>
+
+    {/* ── Dialog suppression OF annulé avec code de confirmation ── */}
+    <Dialog open={!!deleteOfTarget} onOpenChange={(open) => { if (!open) { setDeleteOfTarget(null); setDeleteOfInput(""); } }}>
+      <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="text-destructive">Supprimer la fabrication</DialogTitle>
+        </DialogHeader>
+        {deleteOfTarget && (
+          <div className="space-y-4">
+            <div className="rounded-md border border-border bg-muted/30 px-4 py-3 text-sm space-y-1">
+              <div className="font-mono text-xs text-muted-foreground">{deleteOfTarget.reference}</div>
+              <div className="font-semibold">{deleteOfTarget.coffretName}</div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Cette action est irréversible. L'historique des mouvements de stock associés sera conservé.
+            </p>
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-center">
+              <div className="text-xs text-muted-foreground mb-1">Code de confirmation</div>
+              <div className="text-2xl font-mono font-bold tracking-widest text-destructive">{deleteOfCode}</div>
+            </div>
+            <div className="space-y-2">
+              <Label>Saisissez le code ci-dessus pour confirmer</Label>
+              <Input
+                value={deleteOfInput}
+                onChange={(e) => setDeleteOfInput(e.target.value)}
+                placeholder="_ _ _ _"
+                className="text-center font-mono text-lg tracking-widest"
+                maxLength={4}
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { setDeleteOfTarget(null); setDeleteOfInput(""); }}>Annuler</Button>
+          <Button
+            variant="destructive"
+            disabled={deleteOfInput !== deleteOfCode || deleteOrder.isPending}
+            onClick={() => deleteOfTarget && deleteOrder.mutate(deleteOfTarget.id)}
+          >
+            Supprimer définitivement
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     </TooltipProvider>
   );
 }
