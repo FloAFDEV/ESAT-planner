@@ -158,8 +158,12 @@ function LivraisonsPage() {
 
       const linesByShipment = new Map<string, any[]>();
       for (const line of lineRows) {
+        const variant = variantMap.get(line.product_variant_id) ?? null;
+        const displayWeight = Number(line.weight) > 0
+          ? Number(line.weight)
+          : Number(line.quantity) * Number(variant?.weight ?? 0);
         const current = linesByShipment.get(line.shipment_id) ?? [];
-        current.push({ ...line, variant: variantMap.get(line.product_variant_id) ?? null });
+        current.push({ ...line, variant, displayWeight });
         linesByShipment.set(line.shipment_id, current);
       }
 
@@ -368,7 +372,7 @@ function LivraisonsPage() {
                             <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
                           </td>
                           <td className="p-2 text-right tabular">{fmtInt(it.quantity)}</td>
-                          <td className="p-2 text-right tabular">{fmtKg(it.weight)}</td>
+                          <td className="p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
                         </tr>
                       ))}
                       <tr className="border-t-2 border-border bg-muted/30 font-semibold">
