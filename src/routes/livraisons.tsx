@@ -950,6 +950,16 @@ function NewShipmentDialog() {
   const totalWeight = productWeight + palletTareWeight;
   const hasZeroWeight = lineItems.some((it) => it.weight === 0) && lineItems.length > 0;
 
+  // Validation palette par palette
+  const palletErrors = useMemo(() => pallets.map((p) => {
+    if (!p.tare_weight || Number(p.tare_weight) <= 0) return "Poids tare requis";
+    if (!p.palette_type_id && (!p.longueur || !p.largeur)) return "Dimensions requises (palette personnalisée)";
+    return null;
+  }), [pallets]);
+
+  const hasPalletErrors = palletErrors.some(Boolean);
+  const canSubmit = clientId && lineItems.length > 0 && pallets.length > 0 && !hasPalletErrors;
+
   function setPalletField(i: number, field: keyof PalletDraft, value: string) {
     setPallets((arr) => arr.map((p, j) => j === i ? { ...p, [field]: value } : p));
   }
@@ -974,16 +984,17 @@ function NewShipmentDialog() {
   const create = useMutation({
     mutationFn: async () => {
       if (!clientId) throw new Error("Client requis");
-      if (lineItems.length === 0) throw new Error("Ajoutez au moins une ligne");
+      if (lineItems.length === 0) throw new Error("Ajoutez au moins une ligne produit");
+      if (pallets.length === 0) throw new Error("Au moins une palette est requise");
+      for (const p of pallets) {
+        if (!p.tare_weight || Number(p.tare_weight) <= 0) throw new Error("Toutes les palettes doivent avoir un poids tare > 0");
+        if (!p.palette_type_id && (!p.longueur || !p.largeur)) throw new Error("Les palettes personnalisées doivent avoir longueur et largeur");
+      }
 
+      // total_weight sera recalculé par trigger DB — on envoie 0 comme placeholder
       const { data: shipment, error: shipmentError } = await sb
         .from("shipments")
-        .insert({
-          client_id: clientId,
-          status,
-          total_weight: totalWeight,
-          total_pallets: pallets.length,
-        })
+        .insert({ client_id: clientId, status, total_weight: 0, total_pallets: 0 })
         .select("id")
         .single();
       if (shipmentError) throw shipmentError;
@@ -998,24 +1009,23 @@ function NewShipmentDialog() {
       );
       if (lineError) throw lineError;
 
-      if (pallets.length > 0) {
-        const { error: palletError } = await sb.from("shipment_pallets").insert(
-          pallets.map((p, i) => {
-            const pt = ptMap.get(p.palette_type_id);
-            const tare = Number(p.tare_weight || 0);
-            return {
-              shipment_id: shipment.id,
-              label: p.label.trim() || `Palette ${i + 1}`,
-              type: pt ? pt.label : "custom",
-              tare_weight: tare,
-              weight: tare,
-              depth: p.longueur !== "" ? Number(p.longueur) : null,
-              width: p.largeur !== "" ? Number(p.largeur) : null,
-            };
-          })
-        );
-        if (palletError) throw palletError;
-      }
+      const { error: palletError } = await sb.from("shipment_pallets").insert(
+        pallets.map((p, i) => {
+          const pt = ptMap.get(p.palette_type_id);
+          const tare = Number(p.tare_weight);
+          return {
+            shipment_id: shipment.id,
+            label: p.label.trim() || `Palette ${i + 1}`,
+            type: pt ? pt.label : "custom",
+            tare_weight: tare,
+            weight: tare,
+            depth: p.longueur !== "" ? Number(p.longueur) : null,
+            width: p.largeur !== "" ? Number(p.largeur) : null,
+          };
+        })
+      );
+      if (palletError) throw palletError;
+      // Le trigger tg_sync_shipment_totals_pallets met à jour total_weight + total_pallets
     },
     onSuccess: () => {
       toast.success("Shipment créé");
@@ -1108,19 +1118,22 @@ function NewShipmentDialog() {
           {/* Palettes */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label>Palettes</Label>
+              <Label>Palettes <span className="text-destructive ml-0.5">*</span></Label>
               <Button variant="outline" size="sm" onClick={() => setPallets((p) => [...p, emptyPallet()])}>
                 <Plus className="h-3.5 w-3.5" /> Palette
               </Button>
             </div>
             {pallets.length === 0 && (
-              <p className="text-xs text-muted-foreground py-2">Aucune palette — cliquez sur + Palette pour en ajouter.</p>
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                ⚠ Au moins une palette est requise pour créer un shipment.
+              </div>
             )}
             <div className="space-y-3">
               {pallets.map((p, i) => {
                 const pt = ptMap.get(p.palette_type_id);
+                const err = palletErrors[i];
                 return (
-                  <div key={i} className="rounded-md border border-border p-3 space-y-2 bg-muted/20">
+                  <div key={i} className={`rounded-md border p-3 space-y-2 bg-muted/20 ${err ? "border-destructive/60" : "border-border"}`}>
                     <div className="flex items-center gap-2">
                       <Input
                         placeholder={`Palette ${i + 1}`}
@@ -1171,8 +1184,11 @@ function NewShipmentDialog() {
                           placeholder={pt ? String(pt.width) : "cm"} />
                       </div>
                     </div>
-                    <div className="text-xs text-muted-foreground text-right">
-                      Tare : <span className="font-medium text-foreground">{fmtKg(Number(p.tare_weight || 0))}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        Tare : <span className="font-medium text-foreground">{fmtKg(Number(p.tare_weight || 0))}</span>
+                      </span>
+                      {err && <span className="text-xs text-destructive">{err}</span>}
                     </div>
                   </div>
                 );
@@ -1203,7 +1219,9 @@ function NewShipmentDialog() {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Annuler</Button>
-          <Button onClick={() => create.mutate()} disabled={create.isPending}>Créer le shipment</Button>
+          <Button onClick={() => create.mutate()} disabled={create.isPending || !canSubmit}>
+            Créer le shipment
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
