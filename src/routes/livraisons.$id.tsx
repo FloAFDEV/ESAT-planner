@@ -162,11 +162,20 @@ function LivraisonDetail() {
   const canSetDelivered = status === "shipped";
 
   const totals = useMemo(() => {
+    const lines = (data?.lines ?? []) as any[];
     const pallets = (data?.pallets ?? []) as any[];
-    const totalWeight = pallets.reduce((s, p) => s + Number(p.total_weight ?? 0), 0);
+    // Source de vérité : poids unitaire depuis product_variants
+    const productWeight = lines.reduce((sum, l) => {
+      const unitWeight = Number(l.variant?.weight ?? 0);
+      return sum + Number(l.quantity) * unitWeight;
+    }, 0);
+    const palletTareWeight = pallets.reduce((sum, p) => sum + Number(p.tare_weight ?? 0), 0);
     return {
-      weight: totalWeight,
-      pallets: pallets.length,
+      productWeight,
+      palletTareWeight,
+      totalWeight: productWeight + palletTareWeight,
+      palletCount: pallets.length,
+      hasZeroWeight: lines.some((l) => Number(l.variant?.weight ?? 0) === 0 && l.variant != null),
     };
   }, [data]);
 
@@ -235,10 +244,23 @@ function LivraisonDetail() {
             )}
           </div>
 
-          <div className="rounded-md border border-border p-3">
+          <div className="rounded-md border border-border p-3 space-y-1.5">
             <h2 className="text-sm font-semibold mb-2">Totaux expédition</h2>
-            <div className="text-sm text-muted-foreground">Palettes : {fmtPalette(totals.pallets)}</div>
-            <div className="text-sm text-muted-foreground">Poids total : {fmtKg(totals.weight)}</div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Produits ({(data.lines ?? []).length} ligne{(data.lines ?? []).length !== 1 ? "s" : ""})</span>
+              <span className="tabular font-medium text-foreground">{fmtKg(totals.productWeight)}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Palettes vides ({totals.palletCount})</span>
+              <span className="tabular font-medium text-foreground">{fmtKg(totals.palletTareWeight)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-semibold border-t border-border pt-1.5 mt-1">
+              <span>Total expédition</span>
+              <span className="tabular">{fmtKg(totals.totalWeight)}</span>
+            </div>
+            {totals.hasZeroWeight && (
+              <p className="text-xs text-warning pt-0.5">⚠ Certains produits n'ont pas de poids renseigné en base.</p>
+            )}
           </div>
         </div>
 
@@ -251,25 +273,39 @@ function LivraisonDetail() {
                 <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
                   <tr>
                     <th className="text-left p-2">Produit</th>
-                    <th className="text-right p-2">Quantité</th>
-                    <th className="text-right p-2">Poids ligne</th>
+                    <th className="text-right p-2">Poids/u.</th>
+                    <th className="text-right p-2">Qté</th>
+                    <th className="text-right p-2">Total ligne</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(data.lines ?? []).length === 0 ? (
                     <tr>
-                      <td className="p-3 text-muted-foreground" colSpan={3}>Données manquantes</td>
+                      <td className="p-3 text-muted-foreground" colSpan={4}>Données manquantes</td>
                     </tr>
-                  ) : (data.lines ?? []).map((it: any) => (
-                    <tr key={it.id} className="border-t border-border">
-                      <td className="p-2">
-                        <div className="font-medium">{it.variant?.name ?? "Données manquantes"}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
-                      </td>
-                      <td className="p-2 text-right tabular">{fmtInt(it.quantity)}</td>
-                      <td className="p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
+                  ) : (data.lines ?? []).map((it: any) => {
+                    const unitWeight = Number(it.variant?.weight ?? 0);
+                    const lineWeight = Number(it.quantity) * unitWeight;
+                    return (
+                      <tr key={it.id} className="border-t border-border">
+                        <td className="p-2">
+                          <div className="font-medium">{it.variant?.name ?? "Données manquantes"}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
+                        </td>
+                        <td className="p-2 text-right tabular text-muted-foreground">
+                          {unitWeight > 0 ? fmtKg(unitWeight) : <span className="text-warning text-xs">—</span>}
+                        </td>
+                        <td className="p-2 text-right tabular">{fmtInt(it.quantity)}</td>
+                        <td className="p-2 text-right tabular font-medium">{lineWeight > 0 ? fmtKg(lineWeight) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                  {(data.lines ?? []).length > 0 && (
+                    <tr className="border-t-2 border-border bg-muted/30 text-sm font-semibold">
+                      <td className="p-2" colSpan={3}>Sous-total produits</td>
+                      <td className="p-2 text-right tabular">{fmtKg(totals.productWeight)}</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -296,7 +332,10 @@ function LivraisonDetail() {
                 {(data.pallets ?? []).map((p: any) => (
                   <div key={p.id} className="rounded-md border border-border p-3">
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className="text-sm font-semibold">{p.label ?? p.id}</span>
+                      <div>
+                        <span className="text-sm font-semibold">{p.label ?? p.id}</span>
+                        {p.type && <span className="ml-2 text-xs text-muted-foreground">{p.type}</span>}
+                      </div>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -318,16 +357,8 @@ function LivraisonDetail() {
                         </div>
                       )}
                       <div className="text-muted-foreground">
-                        Palette vide&nbsp;:&nbsp;
-                        <span className="text-foreground tabular">{fmtKg(p.tare_weight)}</span>
-                      </div>
-                      <div className="text-muted-foreground">
-                        Contenu&nbsp;:&nbsp;
-                        <span className="text-foreground tabular">{fmtKg(p.content_weight)}</span>
-                      </div>
-                      <div className="font-medium">
-                        Total estimé&nbsp;:&nbsp;
-                        <span className="tabular">{fmtKg(p.total_weight)}</span>
+                        Poids vide (tare)&nbsp;:&nbsp;
+                        <span className="text-foreground tabular font-medium">{fmtKg(p.tare_weight)}</span>
                       </div>
                     </div>
 
