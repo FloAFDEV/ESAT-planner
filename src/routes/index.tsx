@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Boxes, Factory, Flame, PackageX, TrendingDown, Truck } from "lucide-react";
+import { AlertTriangle, Boxes, Factory, FileJson, FileSpreadsheet, FileText, Flame, PackageCheck, PackageX, TrendingDown, Truck } from "lucide-react";
 import { fmtInt } from "@/lib/format";
 import { normalizeLivraisonStatus, normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
@@ -385,37 +385,143 @@ function Dashboard() {
       </div>
 
       <Card id="exports-centre" className="mt-4">
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="pb-2">
           <CardTitle className="text-base">Centre exports</CardTitle>
-          <Badge variant="outline">Point d'accès unique</Badge>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <button
-            className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-            onClick={() => downloadTextFile("atelier-export.csv", toCsv((composants.data ?? []) as any[]), "text/csv;charset=utf-8")}
-          >
-            Export CSV
-          </button>
-          <button
-            className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-            onClick={() => downloadTextFile("atelier-export.pdf", JSON.stringify({ stocks: composants.data ?? [], production: orders.data ?? [], shipments: shipments.data ?? [] }, null, 2), "application/pdf")}
-          >
-            Export PDF
-          </button>
-          <button
-            className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-            onClick={() => downloadTextFile("atelier-export.xls", toCsv((composants.data ?? []) as any[]), "application/vnd.ms-excel")}
-          >
-            Export Excel
-          </button>
-          <button
-            className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-            onClick={() => downloadTextFile("atelier-export-comptable.csv", toCsv((shipments.data ?? []) as any[]), "text/csv;charset=utf-8")}
-          >
-            Export comptable
-          </button>
+        <CardContent className="space-y-5">
+
+          {/* ── STOCK ─────────────────────────────────────────────────────────── */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Boxes className="h-3 w-3" /> Stock
+            </p>
+            <ExportRow
+              title="Stock des composants"
+              description="Référence, nom, stock physique, réservé, seuil minimum — tous les composants actifs"
+              actions={[
+                {
+                  label: "CSV",
+                  icon: <FileText className="h-3.5 w-3.5" />,
+                  onClick: () => downloadTextFile("atelier-export.csv", toCsv((composants.data ?? []) as any[]), "text/csv;charset=utf-8"),
+                },
+                {
+                  label: "Excel",
+                  icon: <FileSpreadsheet className="h-3.5 w-3.5" />,
+                  onClick: () => downloadTextFile("atelier-export.xls", toCsv((composants.data ?? []) as any[]), "application/vnd.ms-excel"),
+                },
+              ]}
+            />
+          </div>
+
+          {/* ── PRODUCTION ────────────────────────────────────────────────────── */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Factory className="h-3 w-3" /> Production
+            </p>
+            <div className="space-y-2">
+              <ExportRowLink
+                title="Pièces manquantes"
+                description="Analyse de faisabilité par coffret et tirage — requis, disponible, manquant"
+                to="/production"
+                cta="Aller à Production"
+              />
+              <ExportRowLink
+                title="Archives d'OFs"
+                description="OFs terminés ou annulés + consommations matières + snapshot stock au moment de l'export"
+                to="/production"
+                cta="Aller à Production"
+              />
+            </div>
+          </div>
+
+          {/* ── LIVRAISONS ────────────────────────────────────────────────────── */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+              <Truck className="h-3 w-3" /> Livraisons &amp; Commercial
+            </p>
+            <div className="space-y-2">
+              <ExportRowLink
+                title="Livraisons du mois"
+                description="Référence, client, statut, poids (kg), palettes — filtrables par mois"
+                to="/clients"
+                cta="Aller à Clients"
+              />
+              <ExportRow
+                title="Expéditions brutes"
+                description="Toutes les expéditions enregistrées, colonnes complètes"
+                actions={[
+                  {
+                    label: "CSV",
+                    icon: <FileText className="h-3.5 w-3.5" />,
+                    onClick: () => downloadTextFile("atelier-export-comptable.csv", toCsv((shipments.data ?? []) as any[]), "text/csv;charset=utf-8"),
+                  },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* ── AUDIT ─────────────────────────────────────────────────────────── */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
+              <PackageCheck className="h-3 w-3" /> Audit &amp; Traçabilité
+            </p>
+            <ExportRow
+              title="Snapshot global"
+              description="Stocks actuels + OFs actifs + expéditions — instantané complet au format JSON"
+              actions={[
+                {
+                  label: "JSON",
+                  icon: <FileJson className="h-3.5 w-3.5" />,
+                  onClick: () => downloadTextFile("atelier-export.pdf", JSON.stringify({ stocks: composants.data ?? [], production: orders.data ?? [], shipments: shipments.data ?? [] }, null, 2), "application/pdf"),
+                },
+              ]}
+            />
+          </div>
+
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+type ExportAction = { label: string; icon: React.ReactNode; onClick: () => void };
+
+function ExportRow({ title, description, actions }: { title: string; description: string; actions: ExportAction[] }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium leading-tight">{title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {actions.map((a) => (
+          <button
+            key={a.label}
+            onClick={a.onClick}
+            className="inline-flex items-center gap-1 rounded border border-input px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground"
+          >
+            {a.icon}
+            {a.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExportRowLink({ title, description, to, cta }: { title: string; description: string; to: "/production" | "/clients"; cta: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-md border border-border border-dashed px-3 py-2.5 opacity-80">
+      <div className="min-w-0">
+        <p className="text-sm font-medium leading-tight">{title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
+      </div>
+      <Link
+        to={to}
+        className="inline-flex items-center gap-1 rounded border border-input px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground shrink-0"
+      >
+        {cta} →
+      </Link>
     </div>
   );
 }
