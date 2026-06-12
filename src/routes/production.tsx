@@ -409,10 +409,10 @@ function ProductionPage() {
       // On passe la date limite directement dans la requête SQL ;
       // pour le mode "tout" (cutoff=null), on applique un .limit(5000) explicite
       // qui remplace le plafond par défaut de 1000.
-      const shipLines: string[] = ["", "=== 4. EXPÉDITIONS ===", "Référence;Client;Statut;Date création"];
+      const shipLines: string[] = ["", "=== 4. EXPÉDITIONS ===", "Référence;Client;Statut;Poids total (kg);Nb palettes;Date création"];
       let shipQuery = (sb as any)
         .from("shipments")
-        .select("reference, status, created_at, client:clients(name)")
+        .select("reference, status, total_weight, total_pallets, created_at, client:clients(name)")
         .order("created_at", { ascending: false })
         .limit(5000);
       if (cutoff) {
@@ -423,7 +423,7 @@ function ProductionPage() {
         shipLines.push("(données non disponibles)");
       } else {
         for (const s of (shipData ?? []) as any[]) {
-          shipLines.push(`${s.reference ?? "—"};${(s.client as any)?.name ?? "—"};${s.status ?? "—"};${(s.created_at ?? "").slice(0, 10)}`);
+          shipLines.push(`${s.reference ?? "—"};${(s.client as any)?.name ?? "—"};${s.status ?? "—"};${Number(s.total_weight ?? 0).toFixed(3)};${s.total_pallets ?? 0};${(s.created_at ?? "").slice(0, 10)}`);
         }
       }
 
