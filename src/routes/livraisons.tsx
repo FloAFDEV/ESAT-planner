@@ -864,6 +864,18 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
   );
 }
 
+type PalletDraft = {
+  label: string;
+  palette_type_id: string; // "" = custom
+  tare_weight: string;
+  longueur: string;
+  largeur: string;
+};
+
+function emptyPallet(): PalletDraft {
+  return { label: "", palette_type_id: "", tare_weight: "", longueur: "", largeur: "" };
+}
+
 function NewShipmentDialog() {
   const sb = supabase as any;
   const qc = useQueryClient();
@@ -871,6 +883,7 @@ function NewShipmentDialog() {
   const [clientId, setClientId] = useState("");
   const [status, setStatus] = useState<LivraisonStatus>("draft");
   const [lines, setLines] = useState<ShipmentLineDraft[]>([{ product_variant_id: "", quantity: 1 }]);
+  const [pallets, setPallets] = useState<PalletDraft[]>([]);
 
   const clients = useQuery({
     queryKey: ["clients"],
@@ -893,6 +906,17 @@ function NewShipmentDialog() {
     },
   });
 
+  const paletteTypes = useQuery({
+    queryKey: ["palette_types"],
+    queryFn: async () => {
+      const { data, error } = await sb.from("palette_types").select("*").order("label");
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+
+  const ptMap = useMemo(() => new Map((paletteTypes.data ?? []).map((p: any) => [p.id, p])), [paletteTypes.data]);
+
   const vMap = useMemo(() => {
     const m = new Map<string, { weight: number; nb_par_palette: number }>();
     (variants.data ?? []).forEach((v: any) =>
@@ -901,42 +925,71 @@ function NewShipmentDialog() {
     return m;
   }, [variants.data]);
 
-  const totals = useMemo(() => {
-    let weight = 0;
-    let palettes = 0;
-    const items = lines
+  const productWeight = useMemo(() => {
+    return lines
+      .filter((l) => l.product_variant_id && l.quantity > 0)
+      .reduce((sum, l) => {
+        const v = vMap.get(l.product_variant_id);
+        return sum + Number(l.quantity) * Number(v?.weight ?? 0);
+      }, 0);
+  }, [lines, vMap]);
+
+  const lineItems = useMemo(() => {
+    return lines
       .filter((l) => l.product_variant_id && l.quantity > 0)
       .map((l) => {
         const v = vMap.get(l.product_variant_id);
-        const lineWeight = Number(l.quantity) * Number(v?.weight ?? 0);
-        const linePalettes = v?.nb_par_palette ? Math.ceil(Number(l.quantity) / v.nb_par_palette) : 0;
-        weight += lineWeight;
-        palettes += linePalettes;
-        return { ...l, weight: lineWeight, palettes: linePalettes };
+        return { ...l, weight: Number(l.quantity) * Number(v?.weight ?? 0) };
       });
-    const hasZeroWeight = items.some((it) => it.weight === 0);
-    return { items, weight, palettes, hasZeroWeight };
   }, [lines, vMap]);
+
+  const palletTareWeight = useMemo(() =>
+    pallets.reduce((sum, p) => sum + Number(p.tare_weight || 0), 0),
+  [pallets]);
+
+  const totalWeight = productWeight + palletTareWeight;
+  const hasZeroWeight = lineItems.some((it) => it.weight === 0) && lineItems.length > 0;
+
+  function setPalletField(i: number, field: keyof PalletDraft, value: string) {
+    setPallets((arr) => arr.map((p, j) => j === i ? { ...p, [field]: value } : p));
+  }
+
+  function selectPalletType(i: number, typeId: string) {
+    const pt = ptMap.get(typeId);
+    setPallets((arr) => arr.map((p, j) => j === i ? {
+      ...p,
+      palette_type_id: typeId,
+      tare_weight: pt ? String(pt.poids_max ?? "") : p.tare_weight,
+      longueur: pt ? String(pt.length ?? "") : p.longueur,
+      largeur: pt ? String(pt.width ?? "") : p.largeur,
+    } : p));
+  }
+
+  function reset() {
+    setClientId(""); setStatus("draft");
+    setLines([{ product_variant_id: "", quantity: 1 }]);
+    setPallets([]);
+  }
 
   const create = useMutation({
     mutationFn: async () => {
       if (!clientId) throw new Error("Client requis");
-      if (totals.items.length === 0) throw new Error("Ajoutez au moins une ligne");
+      if (lineItems.length === 0) throw new Error("Ajoutez au moins une ligne");
 
       const { data: shipment, error: shipmentError } = await sb
         .from("shipments")
         .insert({
           client_id: clientId,
           status,
-          total_weight: totals.weight,
-          total_pallets: 0,
+          total_weight: totalWeight,
+          total_pallets: pallets.length,
         })
         .select("id")
         .single();
       if (shipmentError) throw shipmentError;
 
       const { error: lineError } = await sb.from("shipment_lines").insert(
-        totals.items.map((it) => ({
+        lineItems.map((it) => ({
           shipment_id: shipment.id,
           product_variant_id: it.product_variant_id,
           quantity: it.quantity,
@@ -944,26 +997,45 @@ function NewShipmentDialog() {
         }))
       );
       if (lineError) throw lineError;
+
+      if (pallets.length > 0) {
+        const { error: palletError } = await sb.from("shipment_pallets").insert(
+          pallets.map((p, i) => {
+            const pt = ptMap.get(p.palette_type_id);
+            const tare = Number(p.tare_weight || 0);
+            return {
+              shipment_id: shipment.id,
+              label: p.label.trim() || `Palette ${i + 1}`,
+              type: pt ? pt.label : "custom",
+              tare_weight: tare,
+              weight: tare,
+              depth: p.longueur !== "" ? Number(p.longueur) : null,
+              width: p.largeur !== "" ? Number(p.largeur) : null,
+            };
+          })
+        );
+        if (palletError) throw palletError;
+      }
     },
     onSuccess: () => {
       toast.success("Shipment créé");
       qc.invalidateQueries({ queryKey: ["shipments"] });
       setOpen(false);
-      setClientId("");
-      setStatus("draft");
-      setLines([{ product_variant_id: "", quantity: 1 }]);
+      reset();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger asChild>
         <Button><Plus className="h-4 w-4" /> Nouveau shipment</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nouveau shipment</DialogTitle></DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-5 py-2">
+
+          {/* Client + statut */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Client</Label>
@@ -983,16 +1055,15 @@ function NewShipmentDialog() {
                 <SelectContent>
                   <SelectItem value="draft">Brouillon</SelectItem>
                   <SelectItem value="ready">Prêt</SelectItem>
-                  <SelectItem value="shipped">Expédié</SelectItem>
-                  <SelectItem value="delivered">Livré</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
+          {/* Lignes produits */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label>Lignes shipment</Label>
+              <Label>Produits</Label>
               <Button variant="outline" size="sm" onClick={() => setLines((l) => [...l, { product_variant_id: "", quantity: 1 }])}>
                 <Plus className="h-3.5 w-3.5" /> Ligne
               </Button>
@@ -1001,33 +1072,28 @@ function NewShipmentDialog() {
               {lines.map((l, i) => {
                 const v = vMap.get(l.product_variant_id);
                 const lineWeight = l.product_variant_id && l.quantity > 0
-                  ? Number(l.quantity) * Number(v?.weight ?? 0)
-                  : null;
+                  ? Number(l.quantity) * Number(v?.weight ?? 0) : null;
                 return (
                   <div key={i} className="flex items-center gap-2">
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1">
                       <Select value={l.product_variant_id} onValueChange={(val) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, product_variant_id: val } : x)))}>
                         <SelectTrigger><SelectValue placeholder="Produit" /></SelectTrigger>
                         <SelectContent>
                           {(variants.data ?? []).map((v: any) => (
                             <SelectItem key={v.id} value={v.id}>
-                              <span className="font-mono text-xs mr-2">{v.reference}</span>
-                              {v.name}
+                              <span className="font-mono text-xs mr-2">{v.reference}</span>{v.name}
                               {Number(v.weight) > 0
                                 ? <span className="ml-2 text-muted-foreground text-xs">· {fmtKg(v.weight)}/u.</span>
-                                : <span className="ml-2 text-warning text-xs">· poids manquant</span>
-                              }
+                                : <span className="ml-2 text-warning text-xs">· poids manquant</span>}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <Input
-                      type="number" min="1" className="w-20"
+                    <Input type="number" min="1" className="w-20"
                       value={l.quantity}
-                      onChange={(e) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, quantity: parseInt(e.target.value, 10) || 0 } : x)))}
-                    />
-                    <div className="w-24 text-right text-sm tabular text-muted-foreground">
+                      onChange={(e) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, quantity: parseInt(e.target.value, 10) || 0 } : x)))} />
+                    <div className="w-20 text-right text-sm tabular text-muted-foreground">
                       {lineWeight !== null ? fmtKg(lineWeight) : "—"}
                     </div>
                     <Button variant="ghost" size="icon" onClick={() => setLines((arr) => arr.filter((_, j) => j !== i))} disabled={lines.length === 1}>
@@ -1039,24 +1105,104 @@ function NewShipmentDialog() {
             </div>
           </div>
 
+          {/* Palettes */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Palettes</Label>
+              <Button variant="outline" size="sm" onClick={() => setPallets((p) => [...p, emptyPallet()])}>
+                <Plus className="h-3.5 w-3.5" /> Palette
+              </Button>
+            </div>
+            {pallets.length === 0 && (
+              <p className="text-xs text-muted-foreground py-2">Aucune palette — cliquez sur + Palette pour en ajouter.</p>
+            )}
+            <div className="space-y-3">
+              {pallets.map((p, i) => {
+                const pt = ptMap.get(p.palette_type_id);
+                return (
+                  <div key={i} className="rounded-md border border-border p-3 space-y-2 bg-muted/20">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder={`Palette ${i + 1}`}
+                        className="flex-1 h-8 text-sm"
+                        value={p.label}
+                        onChange={(e) => setPalletField(i, "label", e.target.value)}
+                      />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setPallets((arr) => arr.filter((_, j) => j !== i))}>
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Type</Label>
+                        <Select value={p.palette_type_id} onValueChange={(v) => selectPalletType(i, v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Personnalisée</SelectItem>
+                            {(paletteTypes.data ?? []).map((pt: any) => (
+                              <SelectItem key={pt.id} value={pt.id}>
+                                {pt.label} · {pt.length}×{pt.width}cm · {pt.poids_max}kg
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Poids vide (kg)</Label>
+                        <Input
+                          type="number" min="0" step="0.1" className="h-8 text-sm"
+                          value={p.tare_weight}
+                          onChange={(e) => setPalletField(i, "tare_weight", e.target.value)}
+                          placeholder={pt ? String(pt.poids_max) : "kg"}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Longueur (cm)</Label>
+                        <Input type="number" min="0" className="h-8 text-sm"
+                          value={p.longueur} onChange={(e) => setPalletField(i, "longueur", e.target.value)}
+                          placeholder={pt ? String(pt.length) : "cm"} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Largeur (cm)</Label>
+                        <Input type="number" min="0" className="h-8 text-sm"
+                          value={p.largeur} onChange={(e) => setPalletField(i, "largeur", e.target.value)}
+                          placeholder={pt ? String(pt.width) : "cm"} />
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground text-right">
+                      Tare : <span className="font-medium text-foreground">{fmtKg(Number(p.tare_weight || 0))}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Récapitulatif poids */}
           <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1.5">
             <div className="flex justify-between text-muted-foreground">
-              <span>Palettes estimées</span>
-              <span className="tabular font-medium text-foreground">{totals.palettes > 0 ? totals.palettes : "—"}</span>
+              <span>Poids produits</span>
+              <span className="tabular font-medium text-foreground">{fmtKg(productWeight)}</span>
             </div>
+            {pallets.length > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Palettes vides ({pallets.length})</span>
+                <span className="tabular font-medium text-foreground">{fmtKg(palletTareWeight)}</span>
+              </div>
+            )}
             <div className="flex justify-between border-t border-border pt-1.5">
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Poids total estimé</span>
-              <span className="font-display text-lg font-semibold tabular">{fmtKg(totals.weight)}</span>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Poids total expédition</span>
+              <span className="font-display text-lg font-semibold tabular">{fmtKg(totalWeight)}</span>
             </div>
-            {totals.hasZeroWeight && totals.items.length > 0 && (
-              <p className="text-xs text-warning mt-1">
-                ⚠ Un ou plusieurs produits n'ont pas de poids renseigné. Complétez-les dans la fiche coffret.
-              </p>
+            {hasZeroWeight && (
+              <p className="text-xs text-warning">⚠ Certains produits n'ont pas de poids renseigné.</p>
             )}
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+          <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Annuler</Button>
           <Button onClick={() => create.mutate()} disabled={create.isPending}>Créer le shipment</Button>
         </DialogFooter>
       </DialogContent>
