@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { ArrowLeft, Phone, Mail, MapPin } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, Phone, Mail, MapPin, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import agecetLogo from "@/assets/logo_agecet_hands.jpg";
 
 export const Route = createFileRoute("/livraisons/$id")({
@@ -24,6 +27,7 @@ function LivraisonDetail() {
   const sb = supabase as any;
   const qc = useQueryClient();
   const { id } = Route.useParams();
+  const [palletDialogOpen, setPalletDialogOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["shipment", id],
@@ -66,7 +70,7 @@ function LivraisonDetail() {
 
       const { data: palletRows, error: palletError } = await sb
         .from("shipment_pallets")
-        .select("id,label,type,weight,width,height,depth")
+        .select("id,label,type,weight,tare_weight,width,height,depth")
         .eq("shipment_id", id)
         .order("created_at", { ascending: true });
       if (palletError) throw palletError;
@@ -90,15 +94,27 @@ function LivraisonDetail() {
         }
       }
 
+      const lines = ((lineRows ?? []) as any[]).map((l) => ({ ...l, variant: variantMap.get(l.product_variant_id) ?? null }));
+      const pallets = (palletRows ?? []).map((p: any) => {
+        const palletLines = palletLinesByPallet.get(p.id) ?? [];
+        const contentWeight = palletLines.reduce((sum, pl) => {
+          const unitWeight = Number(pl.shipment_line?.variant?.weight ?? 0);
+          return sum + Number(pl.quantity) * unitWeight;
+        }, 0);
+        return {
+          ...p,
+          pallet_lines: palletLines,
+          content_weight: contentWeight,
+          total_weight: Number(p.tare_weight ?? 0) + contentWeight,
+        };
+      });
+
       return {
         ...shipment,
         status: normalizeLivraisonStatus(shipment.status),
         client_entity: clientEntity,
-        lines: ((lineRows ?? []) as any[]).map((l) => ({ ...l, variant: variantMap.get(l.product_variant_id) ?? null })),
-        pallets: (palletRows ?? []).map((p: any) => ({
-          ...p,
-          pallet_lines: palletLinesByPallet.get(p.id) ?? [],
-        })),
+        lines,
+        pallets,
       };
     },
   });
@@ -119,18 +135,30 @@ function LivraisonDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deletePallet = useMutation({
+    mutationFn: async (palletId: string) => {
+      const { error } = await sb.from("shipment_pallets").delete().eq("id", palletId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Palette supprimée");
+      qc.invalidateQueries({ queryKey: ["shipment", id] });
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const status = String(data?.status ?? "");
   const canSetReady = status === "draft";
   const canSetShipped = status === "ready";
   const canSetDelivered = status === "shipped";
 
   const totals = useMemo(() => {
-    const lines = (data?.lines ?? []) as any[];
-    const lineWeight = lines.reduce((s, it) => s + Number(it.weight ?? 0), 0);
-    const palletWeight = ((data?.pallets ?? []) as any[]).reduce((s, p) => s + Number(p.weight ?? 0), 0);
+    const pallets = (data?.pallets ?? []) as any[];
+    const totalWeight = pallets.reduce((s, p) => s + Number(p.total_weight ?? 0), 0);
     return {
-      weight: Number(data?.total_weight ?? lineWeight + palletWeight),
-      pallets: Number(data?.total_pallets ?? (data?.pallets ?? []).length),
+      weight: totalWeight,
+      pallets: pallets.length,
     };
   }, [data]);
 
@@ -141,6 +169,8 @@ function LivraisonDetail() {
   if (!data) {
     return <div className="p-4 md:p-8 max-w-7xl mx-auto text-sm text-muted-foreground">Données manquantes</div>;
   }
+
+  const nextPalletLabel = `P${((data.pallets ?? []) as any[]).length + 1}`;
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -198,22 +228,23 @@ function LivraisonDetail() {
           </div>
 
           <div className="rounded-md border border-border p-3">
-            <h2 className="text-sm font-semibold mb-2">Totaux</h2>
-            <div className="text-sm text-muted-foreground">Palettes: {fmtPalette(totals.pallets)}</div>
-            <div className="text-sm text-muted-foreground">Poids: {fmtKg(totals.weight)}</div>
+            <h2 className="text-sm font-semibold mb-2">Totaux expédition</h2>
+            <div className="text-sm text-muted-foreground">Palettes : {fmtPalette(totals.pallets)}</div>
+            <div className="text-sm text-muted-foreground">Poids total : {fmtKg(totals.weight)}</div>
           </div>
         </div>
 
         <div className="px-6 pb-6 space-y-4">
+          {/* Lignes shipment */}
           <div>
             <h2 className="text-sm font-semibold mb-2">Lignes shipment</h2>
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full text-sm">
                 <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
                   <tr>
-                    <th className="text-left p-2">Variant</th>
+                    <th className="text-left p-2">Produit</th>
                     <th className="text-right p-2">Quantité</th>
-                    <th className="text-right p-2">Poids</th>
+                    <th className="text-right p-2">Poids ligne</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -236,38 +267,96 @@ function LivraisonDetail() {
             </div>
           </div>
 
+          {/* Palettes */}
           <div>
-            <h2 className="text-sm font-semibold mb-2">Palettes</h2>
-            <div className="overflow-x-auto rounded-md border border-border">
-              <table className="w-full text-sm">
-                <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
-                  <tr>
-                    <th className="text-left p-2">Label</th>
-                    <th className="text-left p-2">Type</th>
-                    <th className="text-right p-2">Poids</th>
-                    <th className="text-right p-2">Dimensions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.pallets ?? []).length === 0 ? (
-                    <tr>
-                      <td className="p-3 text-muted-foreground" colSpan={4}>Aucune palette</td>
-                    </tr>
-                  ) : (data.pallets ?? []).map((p: any) => (
-                    <tr key={p.id} className="border-t border-border">
-                      <td className="p-2">{p.label ?? p.id}</td>
-                      <td className="p-2">{p.type ?? "n/a"}</td>
-                      <td className="p-2 text-right tabular">{fmtKg(p.weight)}</td>
-                      <td className="p-2 text-right tabular">{[p.width, p.height, p.depth].filter((x) => x != null).join(" x ") || "n/a"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold">Palettes</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                className="print:hidden h-8 gap-1.5"
+                onClick={() => setPalletDialogOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" /> Palette
+              </Button>
             </div>
+
+            {(data.pallets ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucune palette. Cliquez sur « Palette » pour en ajouter une.</p>
+            ) : (
+              <div className="space-y-3">
+                {(data.pallets ?? []).map((p: any) => (
+                  <div key={p.id} className="rounded-md border border-border p-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="text-sm font-semibold">{p.label ?? p.id}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="print:hidden h-7 w-7 text-destructive hover:bg-destructive/10"
+                        onClick={() => deletePallet.mutate(p.id)}
+                        disabled={deletePallet.isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mb-2">
+                      {(p.depth != null || p.width != null) && (
+                        <div className="text-muted-foreground">
+                          Dimensions&nbsp;:&nbsp;
+                          <span className="text-foreground tabular">
+                            {p.depth != null ? `${p.depth} cm` : "—"} × {p.width != null ? `${p.width} cm` : "—"}
+                          </span>
+                        </div>
+                      )}
+                      <div className="text-muted-foreground">
+                        Palette vide&nbsp;:&nbsp;
+                        <span className="text-foreground tabular">{fmtKg(p.tare_weight)}</span>
+                      </div>
+                      <div className="text-muted-foreground">
+                        Contenu&nbsp;:&nbsp;
+                        <span className="text-foreground tabular">{fmtKg(p.content_weight)}</span>
+                      </div>
+                      <div className="font-medium">
+                        Total estimé&nbsp;:&nbsp;
+                        <span className="tabular">{fmtKg(p.total_weight)}</span>
+                      </div>
+                    </div>
+
+                    {(p.pallet_lines ?? []).length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <table className="w-full text-xs">
+                          <thead className="text-muted-foreground">
+                            <tr>
+                              <th className="text-left pb-1">Produit</th>
+                              <th className="text-right pb-1">Qté</th>
+                              <th className="text-right pb-1">Poids</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(p.pallet_lines ?? []).map((pl: any) => {
+                              const unitWeight = Number(pl.shipment_line?.variant?.weight ?? 0);
+                              return (
+                                <tr key={pl.id} className="border-t border-border/50">
+                                  <td className="py-0.5">{pl.shipment_line?.variant?.name ?? "—"}</td>
+                                  <td className="py-0.5 text-right tabular">{fmtInt(pl.quantity)}</td>
+                                  <td className="py-0.5 text-right tabular">{fmtKg(pl.quantity * unitWeight)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
+      {/* Transitions statut */}
       <div className="print:hidden mt-4 rounded-md border border-border p-4">
         <h2 className="text-sm font-semibold mb-3">Statut shipment</h2>
         <div className="flex flex-wrap gap-2 mb-3">
@@ -276,6 +365,214 @@ function LivraisonDetail() {
           <Button variant="outline" disabled={!canSetDelivered || updateStatus.isPending} onClick={() => updateStatus.mutate("delivered")}>Livrer</Button>
         </div>
       </div>
+
+      {/* Dialog ajout palette */}
+      {palletDialogOpen && (
+        <AddPalletDialog
+          shipmentId={id}
+          lines={(data.lines ?? []) as any[]}
+          nextLabel={nextPalletLabel}
+          onClose={() => setPalletDialogOpen(false)}
+          onSuccess={() => {
+            setPalletDialogOpen(false);
+            qc.invalidateQueries({ queryKey: ["shipment", id] });
+            qc.invalidateQueries({ queryKey: ["shipments"] });
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+type PalletLineEntry = { shipment_line_id: string; quantity: number; enabled: boolean };
+
+function AddPalletDialog({
+  shipmentId,
+  lines,
+  nextLabel,
+  onClose,
+  onSuccess,
+}: {
+  shipmentId: string;
+  lines: any[];
+  nextLabel: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const sb = supabase as any;
+
+  const [label, setLabel] = useState(nextLabel);
+  const [longueur, setLongueur] = useState("");
+  const [largeur, setLargeur] = useState("");
+  const [tareWeight, setTareWeight] = useState("");
+  const [lineEntries, setLineEntries] = useState<PalletLineEntry[]>(
+    lines.map((l) => ({ shipment_line_id: l.id, quantity: l.quantity, enabled: false }))
+  );
+
+  const contentWeight = useMemo(() => {
+    return lineEntries.reduce((sum, entry) => {
+      if (!entry.enabled) return sum;
+      const line = lines.find((l) => l.id === entry.shipment_line_id);
+      const unitWeight = Number(line?.variant?.weight ?? 0);
+      return sum + Number(entry.quantity) * unitWeight;
+    }, 0);
+  }, [lineEntries, lines]);
+
+  const tare = Number(tareWeight) || 0;
+  const totalEstimated = tare + contentWeight;
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const activeEntries = lineEntries.filter((e) => e.enabled && e.quantity > 0);
+      if (activeEntries.length === 0) throw new Error("Affectez au moins un produit à cette palette");
+      if (!label.trim()) throw new Error("Label requis");
+
+      const { data: palletRow, error: palletError } = await sb
+        .from("shipment_pallets")
+        .insert({
+          shipment_id: shipmentId,
+          label: label.trim(),
+          tare_weight: tare,
+          weight: totalEstimated,
+          depth: longueur !== "" ? Number(longueur) : null,
+          width: largeur !== "" ? Number(largeur) : null,
+        })
+        .select("id")
+        .single();
+      if (palletError) throw palletError;
+
+      const { error: linesError } = await sb.from("shipment_pallet_lines").insert(
+        activeEntries.map((e) => ({
+          pallet_id: palletRow.id,
+          shipment_line_id: e.shipment_line_id,
+          quantity: e.quantity,
+        }))
+      );
+      if (linesError) throw linesError;
+    },
+    onSuccess,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Ajouter une palette</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Label */}
+          <div className="space-y-1">
+            <Label>Label palette</Label>
+            <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="P1" />
+          </div>
+
+          {/* Dimensions */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Longueur (cm)</Label>
+              <Input
+                type="number" min="0" step="1"
+                value={longueur}
+                onChange={(e) => setLongueur(e.target.value)}
+                placeholder="ex : 120"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Largeur (cm)</Label>
+              <Input
+                type="number" min="0" step="1"
+                value={largeur}
+                onChange={(e) => setLargeur(e.target.value)}
+                placeholder="ex : 80"
+              />
+            </div>
+          </div>
+
+          {/* Poids palette vide */}
+          <div className="space-y-1">
+            <Label>Poids palette vide (kg)</Label>
+            <Input
+              type="number" min="0" step="0.5"
+              value={tareWeight}
+              onChange={(e) => setTareWeight(e.target.value)}
+              placeholder="ex : 25"
+            />
+          </div>
+
+          {/* Affectation coffrets */}
+          <div className="space-y-1">
+            <Label>Coffrets affectés à cette palette</Label>
+            {lines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Aucune ligne dans ce shipment.</p>
+            ) : (
+              <div className="rounded-md border border-border divide-y divide-border">
+                {lines.map((line: any) => {
+                  const entry = lineEntries.find((e) => e.shipment_line_id === line.id)!;
+                  return (
+                    <div key={line.id} className="flex items-center gap-3 p-2">
+                      <input
+                        type="checkbox"
+                        checked={entry.enabled}
+                        onChange={(e) =>
+                          setLineEntries((prev) =>
+                            prev.map((x) => x.shipment_line_id === line.id ? { ...x, enabled: e.target.checked } : x)
+                          )
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      <span className="flex-1 text-sm">
+                        <span className="font-medium">{line.variant?.name ?? "—"}</span>
+                        <span className="ml-2 text-xs text-muted-foreground font-mono">{line.variant?.reference ?? ""}</span>
+                      </span>
+                      <Input
+                        type="number" min="1" max={line.quantity}
+                        value={entry.quantity}
+                        disabled={!entry.enabled}
+                        onChange={(e) =>
+                          setLineEntries((prev) =>
+                            prev.map((x) =>
+                              x.shipment_line_id === line.id
+                                ? { ...x, quantity: Math.min(Number(e.target.value) || 1, line.quantity) }
+                                : x
+                            )
+                          )
+                        }
+                        className="w-20 text-right"
+                      />
+                      <span className="text-xs text-muted-foreground w-12 text-right">/ {line.quantity}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Récapitulatif poids */}
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Palette vide</span>
+              <span className="tabular">{fmtKg(tare)}</span>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Contenu</span>
+              <span className="tabular">{fmtKg(contentWeight)}</span>
+            </div>
+            <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
+              <span>Total estimé</span>
+              <span className="tabular">{fmtKg(totalEstimated)}</span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Annuler</Button>
+          <Button onClick={() => create.mutate()} disabled={create.isPending}>
+            Ajouter la palette
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
