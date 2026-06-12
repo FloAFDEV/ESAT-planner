@@ -241,7 +241,7 @@ function LivraisonsPage() {
       />
 
       {/* Filter bar */}
-      <div className="mb-4 flex flex-wrap items-end gap-2">
+      <div className="mb-4 flex flex-col sm:flex-row flex-wrap items-start sm:items-end gap-2">
         {/* Text search */}
         <div className="relative w-full sm:w-60">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -260,7 +260,7 @@ function LivraisonsPage() {
 
         {/* Status */}
         <Select value={shipStatus} onValueChange={setShipStatus}>
-          <SelectTrigger className="h-9 w-40 text-sm">
+          <SelectTrigger className="h-9 w-full sm:w-40 text-sm">
             <SelectValue placeholder="Statut" />
           </SelectTrigger>
           <SelectContent>
@@ -362,11 +362,11 @@ function LivraisonsPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="mb-2 flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
-                  <Button size="sm" variant="outline" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
-                  <Button size="sm" variant="outline" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
-                  <Button asChild size="sm" variant="secondary" className="gap-1.5">
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
+                  <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
+                  <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
+                  <Button asChild size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
                     <Link to="/livraisons/$id" params={{ id: s.id }}>
                       <Layers className="h-3.5 w-3.5" />
                       Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
@@ -374,31 +374,31 @@ function LivraisonsPage() {
                   </Button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-xs md:text-sm">
                     <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 backdrop-blur text-xs uppercase tracking-wider text-muted-foreground">
                       <tr>
-                        <th className="text-left p-2">Variant</th>
-                        <th className="text-right p-2">Quantité</th>
-                        <th className="text-right p-2">Poids ligne</th>
+                        <th className="text-left p-1.5 md:p-2">Variant</th>
+                        <th className="text-right p-1.5 md:p-2">Quantité</th>
+                        <th className="text-right p-1.5 md:p-2">Poids ligne</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(s.lines ?? []).map((it: any) => (
                         <tr key={it.id} className="border-t border-border">
-                          <td className="p-2">
+                          <td className="p-1.5 md:p-2">
                             <div className="font-medium">{it.variant?.name ?? "Données manquantes"}</div>
                             <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
                           </td>
-                          <td className="p-2 text-right tabular">{fmtInt(it.quantity)}</td>
-                          <td className="p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
+                          <td className="p-1.5 md:p-2 text-right tabular">{fmtInt(it.quantity)}</td>
+                          <td className="p-1.5 md:p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
                         </tr>
                       ))}
                       <tr className="border-t-2 border-border bg-muted/30 font-semibold">
-                        <td className="p-2">Total</td>
-                        <td className="p-2 text-right tabular">
+                        <td className="p-1.5 md:p-2">Total</td>
+                        <td className="p-1.5 md:p-2 text-right tabular">
                           {fmtInt((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.quantity ?? 0), 0))} u.
                         </td>
-                        <td className="p-2 text-right tabular">{fmtKg((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.displayWeight ?? 0), 0))}</td>
+                        <td className="p-1.5 md:p-2 text-right tabular">{fmtKg((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.displayWeight ?? 0), 0))}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -542,30 +542,30 @@ function ClientHistoryPanel({
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs md:text-sm">
             <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wider text-muted-foreground backdrop-blur">
               <tr>
-                <th className="text-left p-2.5">Client</th>
-                <th className="text-right p-2.5">Shipments</th>
-                <th className="text-right p-2.5">Volume (u.)</th>
-                <th className="text-right p-2.5">Poids total</th>
-                <th className="text-right p-2.5">Palettes</th>
-                <th className="text-right p-2.5">Fréquence (j)</th>
-                <th className="text-right p-2.5">Demande cmd (u.)</th>
-                <th className="text-right p-2.5">Dernier shipment</th>
+                <th className="text-left p-1.5 md:p-2.5">Client</th>
+                <th className="text-right p-1.5 md:p-2.5">Shipments</th>
+                <th className="text-right p-1.5 md:p-2.5">Volume (u.)</th>
+                <th className="text-right p-1.5 md:p-2.5">Poids total</th>
+                <th className="text-right p-1.5 md:p-2.5">Palettes</th>
+                <th className="text-right p-1.5 md:p-2.5">Fréquence (j)</th>
+                <th className="text-right p-1.5 md:p-2.5">Demande cmd (u.)</th>
+                <th className="text-right p-1.5 md:p-2.5">Dernier shipment</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-border">
-                  <td className="p-2.5 font-medium">{r.name}</td>
-                  <td className="p-2.5 text-right tabular">{fmtInt(r.deliveries)}</td>
-                  <td className="p-2.5 text-right tabular">{fmtInt(r.totalUnits)}</td>
-                  <td className="p-2.5 text-right tabular">{fmtKg(r.totalWeight)}</td>
-                  <td className="p-2.5 text-right tabular">{fmtPalette(r.totalPallets)}</td>
-                  <td className="p-2.5 text-right tabular">{r.avgFreqDays == null ? "—" : fmtInt(r.avgFreqDays)}</td>
-                  <td className="p-2.5 text-right tabular">{fmtInt(r.indirectProductionUnits)}</td>
-                  <td className="p-2.5 text-right tabular text-muted-foreground">{r.lastDate ? fmtDate(r.lastDate.toISOString()) : "—"}</td>
+                  <td className="p-1.5 md:p-2.5 font-medium">{r.name}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtInt(r.deliveries)}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtInt(r.totalUnits)}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtKg(r.totalWeight)}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtPalette(r.totalPallets)}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular">{r.avgFreqDays == null ? "—" : fmtInt(r.avgFreqDays)}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtInt(r.indirectProductionUnits)}</td>
+                  <td className="p-1.5 md:p-2.5 text-right tabular text-muted-foreground">{r.lastDate ? fmtDate(r.lastDate.toISOString()) : "—"}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

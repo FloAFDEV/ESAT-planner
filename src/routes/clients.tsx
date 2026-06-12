@@ -237,13 +237,13 @@ function ClientsPage() {
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Référentiel</p>
           <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Clients</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2">
           <div className="flex items-center gap-1.5">
             <Input
               type="month"
               value={exportMonth}
               onChange={(e) => setExportMonth(e.target.value)}
-              className="w-40 text-sm"
+              className="w-full sm:w-40 text-sm"
             />
             <Button variant="outline" onClick={exportMonthCsv} title="Exporter CSV mensuel">
               <Download className="h-4 w-4 mr-1" /> Export CSV
@@ -267,7 +267,7 @@ function ClientsPage() {
             />
           </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[70vh] overflow-y-auto divide-y divide-border">
+            <div className="max-h-[45vh] sm:max-h-[70vh] overflow-y-auto divide-y divide-border">
               {filtered.length === 0 && (
                 <p className="p-4 text-sm text-muted-foreground">Aucun client.</p>
               )}
@@ -312,7 +312,7 @@ function ClientsPage() {
                       <p className="text-sm text-muted-foreground mt-0.5">Contact : {selected.contact_name}</p>
                     )}
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex flex-wrap gap-1.5 shrink-0">
                     <Button size="sm" variant="outline" onClick={() => openEdit(selected)}>
                       <Pencil className="h-3.5 w-3.5 mr-1" /> Modifier
                     </Button>
@@ -370,14 +370,14 @@ function ClientsPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-xs md:text-sm">
                       <thead className="bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground">
                         <tr>
-                          <th className="text-left p-3">Référence</th>
-                          <th className="text-left p-3">Date</th>
-                          <th className="text-right p-3">Poids</th>
-                          <th className="text-right p-3">Palettes</th>
-                          <th className="text-center p-3">Statut</th>
+                          <th className="text-left p-1.5 md:p-3">Référence</th>
+                          <th className="text-left p-1.5 md:p-3">Date</th>
+                          <th className="text-right p-1.5 md:p-3">Poids</th>
+                          <th className="text-right p-1.5 md:p-3">Palettes</th>
+                          <th className="text-center p-1.5 md:p-3">Statut</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -390,11 +390,11 @@ function ClientsPage() {
                         ) : (
                           clientLivraisons.map((l) => (
                             <tr key={l.id} className="border-t border-border">
-                              <td className="p-3 font-mono text-xs">{l.reference ?? l.id.slice(0, 8)}</td>
-                              <td className="p-3 text-muted-foreground">{fmtDate(l.created_at)}</td>
-                              <td className="p-3 text-right tabular">{fmtKg(l.total_weight ?? 0)}</td>
-                              <td className="p-3 text-right tabular">{fmtInt(l.total_pallets ?? 0)}</td>
-                              <td className="p-3 text-center">
+                              <td className="p-1.5 md:p-3 font-mono text-xs">{l.reference ?? l.id.slice(0, 8)}</td>
+                              <td className="p-1.5 md:p-3 text-muted-foreground">{fmtDate(l.created_at)}</td>
+                              <td className="p-1.5 md:p-3 text-right tabular">{fmtKg(l.total_weight ?? 0)}</td>
+                              <td className="p-1.5 md:p-3 text-right tabular">{fmtInt(l.total_pallets ?? 0)}</td>
+                              <td className="p-1.5 md:p-3 text-center">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border border-border">
                                   {l.status ?? "—"}
                                 </span>
@@ -406,9 +406,9 @@ function ClientsPage() {
                       {clientLivraisons.length > 0 && (
                         <tfoot>
                           <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
-                            <td className="p-3" colSpan={2}>Total ({clientLivraisons.length} expédition{clientLivraisons.length > 1 ? "s" : ""})</td>
-                            <td className="p-3 text-right tabular">{fmtKg(clientLivraisons.reduce((s, l) => s + Number(l.total_weight ?? 0), 0))}</td>
-                            <td className="p-3 text-right tabular">{fmtInt(clientLivraisons.reduce((s, l) => s + Number(l.total_pallets ?? 0), 0))}</td>
+                            <td className="p-1.5 md:p-3" colSpan={2}>Total ({clientLivraisons.length} expédition{clientLivraisons.length > 1 ? "s" : ""})</td>
+                            <td className="p-1.5 md:p-3 text-right tabular">{fmtKg(clientLivraisons.reduce((s, l) => s + Number(l.total_weight ?? 0), 0))}</td>
+                            <td className="p-1.5 md:p-3 text-right tabular">{fmtInt(clientLivraisons.reduce((s, l) => s + Number(l.total_pallets ?? 0), 0))}</td>
                             <td />
                           </tr>
                         </tfoot>

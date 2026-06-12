@@ -207,7 +207,7 @@ function LivraisonDetail() {
           </div>
         </div>
 
-        <div className="p-6 grid md:grid-cols-2 gap-6">
+        <div className="p-3 md:p-6 grid md:grid-cols-2 gap-3 md:gap-6">
           <div>
             <h2 className="text-sm font-semibold mb-2">Client</h2>
             <p className="text-sm font-medium">{data.client_entity?.name ?? "Données manquantes"}</p>
@@ -308,7 +308,7 @@ function LivraisonDetail() {
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mb-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 sm:gap-x-6 gap-y-1 text-sm mb-2">
                       {(p.depth != null || p.width != null) && (
                         <div className="text-muted-foreground">
                           Dimensions&nbsp;:&nbsp;
@@ -496,7 +496,7 @@ function AddPalletDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-[95vw] md:max-w-lg">
         <DialogHeader>
           <DialogTitle>Ajouter une palette</DialogTitle>
         </DialogHeader>
@@ -532,7 +532,7 @@ function AddPalletDialog({
           </div>
 
           {/* Dimensions */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             <div className="space-y-1">
               <Label>Longueur (cm)</Label>
               <Input
@@ -574,7 +574,7 @@ function AddPalletDialog({
                 {lines.map((line: any) => {
                   const entry = lineEntries.find((e) => e.shipment_line_id === line.id)!;
                   return (
-                    <div key={line.id} className="flex items-center gap-3 p-2">
+                    <div key={line.id} className="flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 text-xs sm:text-sm">
                       <input
                         type="checkbox"
                         checked={entry.enabled}
