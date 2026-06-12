@@ -1131,9 +1131,11 @@ function NewShipmentDialog() {
             <div className="space-y-3">
               {pallets.map((p, i) => {
                 const pt = ptMap.get(p.palette_type_id);
+                const isCustom = p.palette_type_id === "custom";
                 const err = palletErrors[i];
                 return (
                   <div key={i} className={`rounded-md border p-3 space-y-2 bg-muted/20 ${err ? "border-destructive/60" : "border-border"}`}>
+                    {/* Label + type selector */}
                     <div className="flex items-center gap-2">
                       <Input
                         placeholder={`Palette ${i + 1}`}
@@ -1141,17 +1143,11 @@ function NewShipmentDialog() {
                         value={p.label}
                         onChange={(e) => setPalletField(i, "label", e.target.value)}
                       />
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setPallets((arr) => arr.filter((_, j) => j !== i))}>
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Type</Label>
+                      <div className="w-52">
                         <Select value={p.palette_type_id} onValueChange={(v) => selectPalletType(i, v)}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="custom">Personnalisée</SelectItem>
+                            <SelectItem value="custom">Personnalisée…</SelectItem>
                             {(paletteTypes.data ?? []).map((pt: any) => (
                               <SelectItem key={pt.id} value={pt.id}>
                                 {pt.label} · {pt.length}×{pt.width}cm · {pt.poids_max}kg
@@ -1160,36 +1156,45 @@ function NewShipmentDialog() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Poids vide (kg)</Label>
-                        <Input
-                          type="number" min="0" step="0.1" className="h-8 text-sm"
-                          value={p.tare_weight}
-                          onChange={(e) => setPalletField(i, "tare_weight", e.target.value)}
-                          placeholder={pt ? String(pt.poids_max) : "kg"}
-                        />
-                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setPallets((arr) => arr.filter((_, j) => j !== i))}>
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Longueur (cm)</Label>
-                        <Input type="number" min="0" className="h-8 text-sm"
-                          value={p.longueur} onChange={(e) => setPalletField(i, "longueur", e.target.value)}
-                          placeholder={pt ? String(pt.length) : "cm"} />
+
+                    {/* Standard : affichage read-only des valeurs figées */}
+                    {!isCustom && pt && (
+                      <div className="flex gap-4 text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1.5">
+                        <span>{pt.length} × {pt.width} cm</span>
+                        <span>·</span>
+                        <span>Tare : <span className="font-medium text-foreground">{fmtKg(pt.poids_max)}</span></span>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Largeur (cm)</Label>
-                        <Input type="number" min="0" className="h-8 text-sm"
-                          value={p.largeur} onChange={(e) => setPalletField(i, "largeur", e.target.value)}
-                          placeholder={pt ? String(pt.width) : "cm"} />
+                    )}
+
+                    {/* Custom : champs de saisie */}
+                    {isCustom && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Longueur (cm)</Label>
+                          <Input type="number" min="0" className="h-8 text-sm"
+                            value={p.longueur} onChange={(e) => setPalletField(i, "longueur", e.target.value)}
+                            placeholder="ex: 80" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Largeur (cm)</Label>
+                          <Input type="number" min="0" className="h-8 text-sm"
+                            value={p.largeur} onChange={(e) => setPalletField(i, "largeur", e.target.value)}
+                            placeholder="ex: 120" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Poids vide (kg) <span className="text-destructive">*</span></Label>
+                          <Input type="number" min="0" step="0.1" className="h-8 text-sm"
+                            value={p.tare_weight} onChange={(e) => setPalletField(i, "tare_weight", e.target.value)}
+                            placeholder="ex: 22" />
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        Tare : <span className="font-medium text-foreground">{fmtKg(Number(p.tare_weight || 0))}</span>
-                      </span>
-                      {err && <span className="text-xs text-destructive">{err}</span>}
-                    </div>
+                    )}
+
+                    {err && <p className="text-xs text-destructive">{err}</p>}
                   </div>
                 );
               })}
