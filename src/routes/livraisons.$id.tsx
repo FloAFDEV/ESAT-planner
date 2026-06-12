@@ -478,6 +478,17 @@ function AddPalletDialog({
         }))
       );
       if (linesError) throw linesError;
+
+      // Mise à jour total_weight + total_pallets sur le shipment
+      const { data: allPallets } = await sb
+        .from("shipment_pallets")
+        .select("weight")
+        .eq("shipment_id", shipmentId);
+      const newTotalWeight = ((allPallets ?? []) as any[]).reduce((s: number, p: any) => s + Number(p.weight ?? 0), 0);
+      await sb.from("shipments").update({
+        total_weight: newTotalWeight,
+        total_pallets: (allPallets ?? []).length,
+      }).eq("id", shipmentId);
     },
     onSuccess,
     onError: (e: Error) => toast.error(e.message),

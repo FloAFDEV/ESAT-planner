@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Pencil, Plus, Trash2, Download, Package } from "lucide-react";
+import { Pencil, Plus, Trash2, Download, Truck } from "lucide-react";
 import { fmtDate, fmtInt, fmtKg } from "@/lib/format";
 
 export const Route = createFileRoute("/clients")({
@@ -81,7 +81,7 @@ function ClientsPage() {
   const [editMode, setEditMode] = useState<"create" | "edit">("create");
   const [editForm, setEditForm] = useState<ClientForm>(emptyForm());
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [livOpen, setLivOpen] = useState(false);
+
   const [exportMonth, setExportMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -316,8 +316,10 @@ function ClientsPage() {
                     <Button size="sm" variant="outline" onClick={() => openEdit(selected)}>
                       <Pencil className="h-3.5 w-3.5 mr-1" /> Modifier
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setLivOpen(true)}>
-                      <Package className="h-3.5 w-3.5 mr-1" /> Livraison
+                    <Button asChild size="sm" variant="outline">
+                      <Link to="/livraisons">
+                        <Truck className="h-3.5 w-3.5 mr-1" /> Expéditions
+                      </Link>
                     </Button>
                     <Button
                       size="sm"
@@ -491,289 +493,7 @@ function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── New livraison dialog ── */}
-      {selected && (
-        <NouvelleLivraisonDialog
-          open={livOpen}
-          onOpenChange={setLivOpen}
-          clientId={selected.id}
-          clientName={selected.name}
-          clientAddress={[selected.address, selected.postal_code, selected.city, selected.country].filter(Boolean).join(", ")}
-        />
-      )}
     </div>
   );
 }
 
-// ─── Livraison creation dialog with weight calculator ─────────────────────────
-
-type LigneDraft = { coffret_id: string; quantity: number };
-
-function NouvelleLivraisonDialog({
-  open,
-  onOpenChange,
-  clientId,
-  clientName,
-  clientAddress,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  clientId: string;
-  clientName: string;
-  clientAddress: string;
-}) {
-  const sb = supabase as any;
-  const qc = useQueryClient();
-
-  const [lignes, setLignes] = useState<LigneDraft[]>([{ coffret_id: "", quantity: 1 }]);
-  const [paletteTypeId, setPaletteTypeId] = useState<string>("none");
-  const [palettePoidsSurcharge, setPalettePoidsSurcharge] = useState<string>("");
-
-  const coffrets = useQuery({
-    queryKey: ["coffrets", "livraison"],
-    queryFn: async () => {
-      const { data, error } = await sb
-        .from("coffrets")
-        .select("id,reference,name,poids_coffret,nb_par_palette,poids_palette")
-        .order("reference");
-      if (error) throw error;
-      return (data ?? []) as any[];
-    },
-  });
-
-  const paletteTypes = useQuery({
-    queryKey: ["palette_types"],
-    queryFn: async () => {
-      const { data, error } = await sb.from("palette_types").select("*").order("label");
-      if (error) throw error;
-      return (data ?? []) as any[];
-    },
-  });
-
-  useEffect(() => {
-    if (!open) {
-      setLignes([{ coffret_id: "", quantity: 1 }]);
-      setPaletteTypeId("none");
-      setPalettePoidsSurcharge("");
-    }
-  }, [open]);
-
-  const coffretMap = useMemo(
-    () => new Map((coffrets.data ?? []).map((c: any) => [c.id, c])),
-    [coffrets.data]
-  );
-
-  const selectedPaletteType = useMemo(
-    () => paletteTypeId === "none" ? null : ((paletteTypes.data ?? []).find((p: any) => p.id === paletteTypeId) ?? null),
-    [paletteTypes.data, paletteTypeId]
-  );
-
-  const calc = useMemo(() => {
-    let poidsItems = 0;
-    let nbPalettesTotal = 0;
-
-    const details = lignes
-      .filter((l) => l.coffret_id && l.quantity > 0)
-      .map((l) => {
-        const c = coffretMap.get(l.coffret_id);
-        if (!c) return null;
-        const poidsCoffrets = l.quantity * Number(c.poids_coffret ?? 0);
-        const nbPalettes = c.nb_par_palette > 0 ? Math.ceil(l.quantity / Number(c.nb_par_palette)) : 0;
-        const poidsPaletteBase = Number(c.poids_palette ?? 0);
-        poidsItems += poidsCoffrets;
-        nbPalettesTotal += nbPalettes;
-        return { coffret: c, quantity: l.quantity, poidsCoffrets, nbPalettes, poidsPaletteBase };
-      })
-      .filter(Boolean) as any[];
-
-    const paletteUnitWeight =
-      palettePoidsSurcharge !== ""
-        ? Number(palettePoidsSurcharge)
-        : selectedPaletteType
-        ? Number(selectedPaletteType.poids_max ?? 0)
-        : details[0]?.poidsPaletteBase ?? 0;
-
-    const poidsPalettes = nbPalettesTotal * paletteUnitWeight;
-    const totalPoids = poidsItems + poidsPalettes;
-
-    return { details, poidsItems, poidsPalettes, paletteUnitWeight, nbPalettesTotal, totalPoids };
-  }, [lignes, coffretMap, paletteTypeId, palettePoidsSurcharge, selectedPaletteType]);
-
-  const create = useMutation({
-    mutationFn: async () => {
-      if (calc.details.length === 0) throw new Error("Ajoutez au moins une ligne");
-
-      const reference = `LIV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-
-      const { data: liv, error: livError } = await sb
-        .from("livraisons")
-        .insert({
-          reference,
-          client: clientName,
-          adresse: clientAddress,
-          client_id: clientId,
-          date: new Date().toISOString().slice(0, 10),
-          total_poids: calc.totalPoids,
-          total_palette: calc.nbPalettesTotal,
-          status: "draft",
-        })
-        .select("id")
-        .single();
-      if (livError) throw livError;
-
-      const items = calc.details.map((d: any) => ({
-        livraison_id: liv.id,
-        coffret_id: d.coffret.id,
-        quantity: d.quantity,
-        palettes: d.nbPalettes,
-        poids: d.poidsCoffrets,
-      }));
-
-      const { error: itemsError } = await sb.from("livraison_items").insert(items);
-      if (itemsError) throw itemsError;
-    },
-    onSuccess: () => {
-      toast.success("Livraison créée");
-      qc.invalidateQueries({ queryKey: ["livraisons"] });
-      onOpenChange(false);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  function addLigne() {
-    setLignes((ls) => [...ls, { coffret_id: "", quantity: 1 }]);
-  }
-
-  function removeLigne(i: number) {
-    setLignes((ls) => ls.filter((_, idx) => idx !== i));
-  }
-
-  function setLigne(i: number, field: keyof LigneDraft, value: string | number) {
-    setLignes((ls) => ls.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)));
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Nouvelle livraison — {clientName}</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto pr-1">
-          {/* Lignes coffrets */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Coffrets</Label>
-              <Button size="sm" variant="outline" onClick={addLigne}>
-                <Plus className="h-3.5 w-3.5 mr-1" /> Ligne
-              </Button>
-            </div>
-            {lignes.map((l, i) => {
-              const c = coffretMap.get(l.coffret_id);
-              const poidsLigne = l.quantity * Number(c?.poids_coffret ?? 0);
-              const nbPal = c?.nb_par_palette > 0 ? Math.ceil(l.quantity / Number(c.nb_par_palette)) : 0;
-              return (
-                <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
-                  <Select value={l.coffret_id} onValueChange={(v) => setLigne(i, "coffret_id", v)}>
-                    <SelectTrigger><SelectValue placeholder="Coffret…" /></SelectTrigger>
-                    <SelectContent>
-                      {(coffrets.data ?? []).map((c: any) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          <span className="font-mono text-xs mr-1">{c.reference}</span> {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min="1"
-                    className="w-20 text-right"
-                    value={l.quantity}
-                    onChange={(e) => setLigne(i, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
-                  />
-                  {c && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {fmtKg(poidsLigne)} · {nbPal} pal.
-                    </span>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => removeLigne(i)} disabled={lignes.length === 1}>
-                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Palette */}
-          <div className="space-y-2">
-            <Label>Type de palette</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <Select value={paletteTypeId} onValueChange={(v) => { setPaletteTypeId(v); setPalettePoidsSurcharge(""); }}>
-                <SelectTrigger><SelectValue placeholder="Choisir un type…" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Aucun (poids issu du coffret) —</SelectItem>
-                  {(paletteTypes.data ?? []).map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.label} · {p.length}×{p.width}×{p.height} cm · max {p.poids_max} kg
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={palettePoidsSurcharge}
-                  onChange={(e) => setPalettePoidsSurcharge(e.target.value)}
-                  placeholder={`Poids palette (kg) ${selectedPaletteType ? `[défaut: ${selectedPaletteType.poids_max}]` : ""}`}
-                />
-              </div>
-            </div>
-            {selectedPaletteType && (
-              <p className="text-xs text-muted-foreground">
-                Dimensions : {selectedPaletteType.length} × {selectedPaletteType.width} × {selectedPaletteType.height} cm
-              </p>
-            )}
-          </div>
-
-          {/* Calcul en temps réel */}
-          {calc.details.length > 0 && (
-            <div className="rounded-md border border-border bg-muted/30 p-4 space-y-2 text-sm">
-              <div className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2">Calcul poids</div>
-              {calc.details.map((d: any, i: number) => (
-                <div key={i} className="flex justify-between text-xs">
-                  <span className="font-mono">{d.coffret.reference}</span>
-                  <span>{d.quantity} × {d.coffret.poids_coffret} kg = <strong>{fmtKg(d.poidsCoffrets)}</strong> · {d.nbPalettes} pal.</span>
-                </div>
-              ))}
-              <div className="border-t border-border pt-2 mt-1 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Poids coffrets</span>
-                  <strong>{fmtKg(calc.poidsItems)}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Palettes ({calc.nbPalettesTotal} × {calc.paletteUnitWeight} kg)
-                  </span>
-                  <strong>{fmtKg(calc.poidsPalettes)}</strong>
-                </div>
-                <div className="flex justify-between text-base font-semibold border-t border-border pt-1 mt-1">
-                  <span>Total</span>
-                  <span>{fmtKg(calc.totalPoids)} · {calc.nbPalettesTotal} palette{calc.nbPalettesTotal > 1 ? "s" : ""}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button onClick={() => create.mutate()} disabled={create.isPending || calc.details.length === 0}>
-            Créer la livraison
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

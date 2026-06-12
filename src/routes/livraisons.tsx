@@ -366,12 +366,12 @@ function LivraisonsPage() {
                   <Button size="sm" variant="outline" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
                   <Button size="sm" variant="outline" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
                   <Button size="sm" variant="outline" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
-                  <Link to="/livraisons/$id" params={{ id: s.id }}>
-                    <Button size="sm" variant="secondary" className="gap-1.5">
+                  <Button asChild size="sm" variant="secondary" className="gap-1.5">
+                    <Link to="/livraisons/$id" params={{ id: s.id }}>
                       <Layers className="h-3.5 w-3.5" />
                       Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
