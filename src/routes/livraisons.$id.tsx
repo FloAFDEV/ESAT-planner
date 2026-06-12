@@ -10,6 +10,7 @@ import { UI } from "@/lib/uiLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import agecetLogo from "@/assets/logo_agecet_hands.jpg";
 
@@ -409,6 +410,27 @@ function AddPalletDialog({
     lines.map((l) => ({ shipment_line_id: l.id, quantity: l.quantity, enabled: false }))
   );
 
+  const paletteTypes = useQuery({
+    queryKey: ["palette_types"],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("palette_types")
+        .select("id,label,length,width,tare_weight")
+        .order("label");
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+
+  const applyPaletteType = (typeId: string) => {
+    if (typeId === "custom") return;
+    const pt = (paletteTypes.data ?? []).find((p: any) => p.id === typeId);
+    if (!pt) return;
+    if (pt.length != null) setLongueur(String(pt.length));
+    if (pt.width != null) setLargeur(String(pt.width));
+    if (pt.tare_weight != null) setTareWeight(String(pt.tare_weight));
+  };
+
   const contentWeight = useMemo(() => {
     return lineEntries.reduce((sum, entry) => {
       if (!entry.enabled) return sum;
@@ -468,6 +490,29 @@ function AddPalletDialog({
             <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="P1" />
           </div>
 
+          {/* Type de palette — pré-remplit les champs */}
+          <div className="space-y-1">
+            <Label>Type de palette</Label>
+            <Select onValueChange={applyPaletteType} defaultValue="custom">
+              <SelectTrigger>
+                <SelectValue placeholder="Choisir un type…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">— Personnalisé (saisie manuelle) —</SelectItem>
+                {(paletteTypes.data ?? []).map((pt: any) => (
+                  <SelectItem key={pt.id} value={pt.id}>
+                    {pt.label}
+                    {pt.length && pt.width ? ` · ${pt.length}×${pt.width} cm` : ""}
+                    {pt.tare_weight ? ` · tare ${pt.tare_weight} kg` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Sélectionner un type pré-remplit les champs — modifiables ensuite.
+            </p>
+          </div>
+
           {/* Dimensions */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -497,7 +542,7 @@ function AddPalletDialog({
               type="number" min="0" step="0.5"
               value={tareWeight}
               onChange={(e) => setTareWeight(e.target.value)}
-              placeholder="ex : 25"
+              placeholder="ex : 22"
             />
           </div>
 
