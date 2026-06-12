@@ -876,6 +876,13 @@ function emptyPallet(): PalletDraft {
   return { label: "", palette_type_id: "custom", tare_weight: "", longueur: "", largeur: "" };
 }
 
+// Fallback si palette_types est vide ou indisponible en DB (migration non appliquée)
+const FALLBACK_PALETTE_TYPES: { id: string; label: string; length: number; width: number; poids_max: number; tare_weight: number }[] = [
+  { id: "fallback-eur",      label: "Palette Europe 80x120",   length: 120, width: 80, poids_max: 1500, tare_weight: 10   },
+  { id: "fallback-std",      label: "Palette Standard 80x120", length: 120, width: 80, poids_max: 1500, tare_weight: 0.7  },
+  { id: "fallback-demi",     label: "Demi-palette 40x60",      length:  60, width: 40, poids_max:  750, tare_weight: 0.4  },
+];
+
 function NewShipmentDialog() {
   const sb = supabase as any;
   const qc = useQueryClient();
@@ -928,7 +935,15 @@ function NewShipmentDialog() {
     },
   });
 
-  const ptMap = useMemo(() => new Map((paletteTypes.data ?? []).map((p: any) => [p.id, p])), [paletteTypes.data]);
+  // Si la table palette_types n'existe pas encore en DB, on utilise les types standards hardcodés
+  const effectivePaletteTypes = (paletteTypes.data ?? []).length > 0
+    ? (paletteTypes.data ?? [])
+    : FALLBACK_PALETTE_TYPES;
+
+  const ptMap = useMemo(
+    () => new Map(effectivePaletteTypes.map((p: any) => [p.id, p])),
+    [effectivePaletteTypes]
+  );
 
   const vMap = useMemo(() => {
     const m = new Map<string, { weight: number }>();
@@ -998,10 +1013,9 @@ function NewShipmentDialog() {
     if (details.length === 0) return null;
 
     // Recommend palette type: prefer EUR label, else first
-    const pts = (paletteTypes.data ?? []) as any[];
-    const recommended = pts.find((pt: any) => /eur/i.test(pt.label)) ?? pts[0] ?? null;
+    const recommended = effectivePaletteTypes.find((pt: any) => /eur/i.test(pt.label)) ?? effectivePaletteTypes[0] ?? null;
     return { totalNeeded, details, recommended };
-  }, [lines, variants.data, capacityMap, paletteTypes.data]);
+  }, [lines, variants.data, capacityMap, effectivePaletteTypes]);
 
   function applySuggestion() {
     if (!palletSuggestion) return;
@@ -1247,7 +1261,7 @@ function NewShipmentDialog() {
                           <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="custom">Personnalisée…</SelectItem>
-                            {(paletteTypes.data ?? []).map((pt: any) => (
+                            {effectivePaletteTypes.map((pt: any) => (
                               <SelectItem key={pt.id} value={pt.id}>
                                 {pt.label} · {pt.length}×{pt.width}cm · tare {pt.tare_weight}kg
                               </SelectItem>
