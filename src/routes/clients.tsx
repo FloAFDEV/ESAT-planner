@@ -97,12 +97,12 @@ function ClientsPage() {
   });
 
   const livraisons = useQuery({
-    queryKey: ["livraisons", "clients"],
+    queryKey: ["shipments", "clients"],
     queryFn: async () => {
       const { data, error } = await sb
-        .from("livraisons")
-        .select("id,reference,date,client_id,status,total_poids,total_palette,created_at")
-        .order("date", { ascending: false });
+        .from("shipments")
+        .select("id,reference,client_id,status,total_weight,total_pallets,created_at")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as any[];
     },
@@ -181,11 +181,11 @@ function ClientsPage() {
   function exportMonthCsv() {
     const [year, month] = exportMonth.split("-").map(Number);
     const rows = (livraisons.data ?? []).filter((l) => {
-      const d = new Date(l.date ?? l.created_at);
+      const d = new Date(l.created_at);
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
     if (rows.length === 0) {
-      toast.info("Aucune livraison pour cette période");
+      toast.info("Aucune expédition pour cette période");
       return;
     }
     const clientMap = new Map((clients.data ?? []).map((c) => [c.id, c.name]));
@@ -193,14 +193,14 @@ function ClientsPage() {
     const lines = rows.map((l) =>
       toCsvRow([
         l.reference ?? l.id,
-        l.date ?? l.created_at?.slice(0, 10),
+        l.created_at?.slice(0, 10),
         clientMap.get(l.client_id) ?? "",
         l.status ?? "",
-        l.total_poids ?? 0,
-        l.total_palette ?? 0,
+        l.total_weight ?? 0,
+        l.total_pallets ?? 0,
       ])
     );
-    downloadCsv(`livraisons-${exportMonth}.csv`, [header, ...lines]);
+    downloadCsv(`expeditions-${exportMonth}.csv`, [header, ...lines]);
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -366,7 +366,7 @@ function ClientsPage() {
               {/* Shipping history */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Historique livraisons</CardTitle>
+                  <CardTitle className="text-base">Historique expéditions</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -384,16 +384,16 @@ function ClientsPage() {
                         {clientLivraisons.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="p-4 text-sm text-muted-foreground text-center">
-                              Aucune livraison pour ce client.
+                              Aucune expédition pour ce client.
                             </td>
                           </tr>
                         ) : (
                           clientLivraisons.map((l) => (
                             <tr key={l.id} className="border-t border-border">
                               <td className="p-3 font-mono text-xs">{l.reference ?? l.id.slice(0, 8)}</td>
-                              <td className="p-3 text-muted-foreground">{fmtDate(l.date ?? l.created_at)}</td>
-                              <td className="p-3 text-right tabular">{fmtKg(l.total_poids ?? 0)}</td>
-                              <td className="p-3 text-right tabular">{fmtInt(l.total_palette ?? 0)}</td>
+                              <td className="p-3 text-muted-foreground">{fmtDate(l.created_at)}</td>
+                              <td className="p-3 text-right tabular">{fmtKg(l.total_weight ?? 0)}</td>
+                              <td className="p-3 text-right tabular">{fmtInt(l.total_pallets ?? 0)}</td>
                               <td className="p-3 text-center">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border border-border">
                                   {l.status ?? "—"}
@@ -406,9 +406,9 @@ function ClientsPage() {
                       {clientLivraisons.length > 0 && (
                         <tfoot>
                           <tr className="border-t-2 border-border bg-muted/30 font-semibold text-sm">
-                            <td className="p-3" colSpan={2}>Total ({clientLivraisons.length} livraison{clientLivraisons.length > 1 ? "s" : ""})</td>
-                            <td className="p-3 text-right tabular">{fmtKg(clientLivraisons.reduce((s, l) => s + Number(l.total_poids ?? 0), 0))}</td>
-                            <td className="p-3 text-right tabular">{fmtInt(clientLivraisons.reduce((s, l) => s + Number(l.total_palette ?? 0), 0))}</td>
+                            <td className="p-3" colSpan={2}>Total ({clientLivraisons.length} expédition{clientLivraisons.length > 1 ? "s" : ""})</td>
+                            <td className="p-3 text-right tabular">{fmtKg(clientLivraisons.reduce((s, l) => s + Number(l.total_weight ?? 0), 0))}</td>
+                            <td className="p-3 text-right tabular">{fmtInt(clientLivraisons.reduce((s, l) => s + Number(l.total_pallets ?? 0), 0))}</td>
                             <td />
                           </tr>
                         </tfoot>
