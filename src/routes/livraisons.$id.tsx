@@ -95,7 +95,14 @@ function LivraisonDetail() {
         }
       }
 
-      const lines = ((lineRows ?? []) as any[]).map((l) => ({ ...l, variant: variantMap.get(l.product_variant_id) ?? null }));
+      const lines = ((lineRows ?? []) as any[]).map((l) => {
+        const variant = variantMap.get(l.product_variant_id) ?? null;
+        // Fallback si le poids a été sauvegardé à 0 (poids_coffret absent lors de la création)
+        const displayWeight = Number(l.weight) > 0
+          ? Number(l.weight)
+          : Number(l.quantity) * Number(variant?.weight ?? 0);
+        return { ...l, variant, displayWeight };
+      });
       const pallets = (palletRows ?? []).map((p: any) => {
         const palletLines = palletLinesByPallet.get(p.id) ?? [];
         const contentWeight = palletLines.reduce((sum, pl) => {
@@ -260,7 +267,7 @@ function LivraisonDetail() {
                         <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
                       </td>
                       <td className="p-2 text-right tabular">{fmtInt(it.quantity)}</td>
-                      <td className="p-2 text-right tabular">{fmtKg(it.weight)}</td>
+                      <td className="p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1148,6 +1148,142 @@ function ProductionPage() {
       </DialogContent>
     </Dialog>
 
+      <ReservationsByOf />
+
     </TooltipProvider>
+  );
+}
+
+// ── Composant : Réservations par OF ─────────────────────────────────────────
+
+function ReservationsByOf() {
+  const sb = supabase as any;
+  const [filterOf, setFilterOf] = useState("");
+  const [filterRef, setFilterRef] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["reservations_by_of"],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("v_reservations_by_of")
+        .select("reservation_id,production_order_id,of_number,product_reference,composant_reference,composant_name,quantity,status,created_at,of_status")
+        .order("of_number", { ascending: true })
+        .order("product_reference", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+
+  const filtered = useMemo(() => {
+    let rows = data ?? [];
+    if (filterStatus !== "all") rows = rows.filter((r) => r.status === filterStatus);
+    const q = filterOf.trim().toLowerCase();
+    if (q) rows = rows.filter((r) => (r.of_number ?? "").toLowerCase().includes(q));
+    const qr = filterRef.trim().toLowerCase();
+    if (qr) rows = rows.filter((r) => (r.product_reference ?? "").toLowerCase().includes(qr));
+    return rows;
+  }, [data, filterOf, filterRef, filterStatus]);
+
+  // Regroupement par OF
+  const grouped = useMemo(() => {
+    const map = new Map<string, { of_number: string; of_status: string; rows: any[] }>();
+    for (const row of filtered) {
+      const key = row.production_order_id;
+      if (!map.has(key)) map.set(key, { of_number: row.of_number, of_status: row.of_status, rows: [] });
+      map.get(key)!.rows.push(row);
+    }
+    return Array.from(map.values());
+  }, [filtered]);
+
+  const statusLabel: Record<string, string> = {
+    active: "Réservé",
+    consumed: "Consommé",
+    canceled: "Annulé",
+  };
+  const statusCls: Record<string, string> = {
+    active:   "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+    consumed: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
+    canceled: "bg-muted text-muted-foreground",
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between flex-wrap gap-2">
+        <CardTitle className="text-base">Réservations de stock par OF</CardTitle>
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          <Input
+            value={filterOf}
+            onChange={(e) => setFilterOf(e.target.value)}
+            placeholder="Filtrer par OF…"
+            className="h-8 w-36 text-sm"
+          />
+          <Input
+            value={filterRef}
+            onChange={(e) => setFilterRef(e.target.value)}
+            placeholder="Filtrer par produit…"
+            className="h-8 w-36 text-sm"
+          />
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="h-8 w-36 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous statuts</SelectItem>
+              <SelectItem value="active">Réservé</SelectItem>
+              <SelectItem value="consumed">Consommé</SelectItem>
+              <SelectItem value="canceled">Annulé</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading && (
+          <div className="p-4 text-sm text-muted-foreground">Chargement…</div>
+        )}
+        {!isLoading && grouped.length === 0 && (
+          <div className="p-4 text-sm text-muted-foreground">Aucune réservation.</div>
+        )}
+        {grouped.map((group) => (
+          <div key={group.of_number} className="border-t border-border">
+            <div className="flex items-center gap-3 px-4 py-2 bg-muted/40">
+              <span className="text-xs font-mono font-semibold text-foreground">{group.of_number}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusCls[group.of_status] ?? "bg-muted text-muted-foreground"}`}>
+                OF {group.rows[0]?.product_reference ?? "—"}
+              </span>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase tracking-wider text-muted-foreground bg-muted/20">
+                <tr>
+                  <th className="text-left p-2 pl-4">Produit</th>
+                  <th className="text-left p-2">Composant</th>
+                  <th className="text-right p-2">Qté</th>
+                  <th className="text-center p-2">Statut</th>
+                  <th className="text-right p-2 pr-4">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.rows.map((r) => (
+                  <tr key={r.reservation_id} className="border-t border-border/50 hover:bg-muted/20">
+                    <td className="p-2 pl-4 font-mono text-xs">{r.product_reference ?? "—"}</td>
+                    <td className="p-2">
+                      <div className="font-medium">{r.composant_name}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{r.composant_reference}</div>
+                    </td>
+                    <td className="p-2 text-right tabular">{fmtInt(r.quantity)}</td>
+                    <td className="p-2 text-center">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusCls[r.status] ?? ""}`}>
+                        {statusLabel[r.status] ?? r.status}
+                      </span>
+                    </td>
+                    <td className="p-2 pr-4 text-right text-xs text-muted-foreground tabular">
+                      {new Date(r.created_at).toLocaleDateString("fr-FR")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

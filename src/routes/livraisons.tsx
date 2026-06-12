@@ -158,8 +158,12 @@ function LivraisonsPage() {
 
       const linesByShipment = new Map<string, any[]>();
       for (const line of lineRows) {
+        const variant = variantMap.get(line.product_variant_id) ?? null;
+        const displayWeight = Number(line.weight) > 0
+          ? Number(line.weight)
+          : Number(line.quantity) * Number(variant?.weight ?? 0);
         const current = linesByShipment.get(line.shipment_id) ?? [];
-        current.push({ ...line, variant: variantMap.get(line.product_variant_id) ?? null });
+        current.push({ ...line, variant, displayWeight });
         linesByShipment.set(line.shipment_id, current);
       }
 
@@ -368,7 +372,7 @@ function LivraisonsPage() {
                             <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
                           </td>
                           <td className="p-2 text-right tabular">{fmtInt(it.quantity)}</td>
-                          <td className="p-2 text-right tabular">{fmtKg(it.weight)}</td>
+                          <td className="p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
                         </tr>
                       ))}
                       <tr className="border-t-2 border-border bg-muted/30 font-semibold">
@@ -692,7 +696,7 @@ function NewShipmentDialog() {
     queryFn: async () => {
       const { data, error } = await sb
         .from("product_variants")
-        .select("id,reference,name,weight")
+        .select("id,reference,name,weight,nb_par_palette")
         .order("reference");
       if (error) throw error;
       return data;
@@ -700,22 +704,28 @@ function NewShipmentDialog() {
   });
 
   const vMap = useMemo(() => {
-    const m = new Map<string, { weight: number }>();
-    (variants.data ?? []).forEach((v: any) => m.set(v.id, { weight: Number(v.weight ?? 0) }));
+    const m = new Map<string, { weight: number; nb_par_palette: number }>();
+    (variants.data ?? []).forEach((v: any) =>
+      m.set(v.id, { weight: Number(v.weight ?? 0), nb_par_palette: Number(v.nb_par_palette ?? 0) })
+    );
     return m;
   }, [variants.data]);
 
   const totals = useMemo(() => {
     let weight = 0;
+    let palettes = 0;
     const items = lines
       .filter((l) => l.product_variant_id && l.quantity > 0)
       .map((l) => {
         const v = vMap.get(l.product_variant_id);
         const lineWeight = Number(l.quantity) * Number(v?.weight ?? 0);
+        const linePalettes = v?.nb_par_palette ? Math.ceil(Number(l.quantity) / v.nb_par_palette) : 0;
         weight += lineWeight;
-        return { ...l, weight: lineWeight };
+        palettes += linePalettes;
+        return { ...l, weight: lineWeight, palettes: linePalettes };
       });
-    return { items, weight };
+    const hasZeroWeight = items.some((it) => it.weight === 0);
+    return { items, weight, palettes, hasZeroWeight };
   }, [lines, vMap]);
 
   const create = useMutation({
@@ -798,38 +808,61 @@ function NewShipmentDialog() {
               </Button>
             </div>
             <div className="space-y-2">
-              {lines.map((l, i) => (
-                <div key={i} className="flex items-end gap-2">
-                  <div className="flex-1 space-y-1">
-                    <Select value={l.product_variant_id} onValueChange={(v) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, product_variant_id: v } : x)))}>
-                      <SelectTrigger><SelectValue placeholder="Variant" /></SelectTrigger>
-                      <SelectContent>
-                        {(variants.data ?? []).map((v: any) => (
-                          <SelectItem key={v.id} value={v.id}>
-                            <span className="font-mono text-xs mr-2">{v.reference}</span>{v.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {lines.map((l, i) => {
+                const v = vMap.get(l.product_variant_id);
+                const lineWeight = l.product_variant_id && l.quantity > 0
+                  ? Number(l.quantity) * Number(v?.weight ?? 0)
+                  : null;
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="flex-1 space-y-1">
+                      <Select value={l.product_variant_id} onValueChange={(val) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, product_variant_id: val } : x)))}>
+                        <SelectTrigger><SelectValue placeholder="Produit" /></SelectTrigger>
+                        <SelectContent>
+                          {(variants.data ?? []).map((v: any) => (
+                            <SelectItem key={v.id} value={v.id}>
+                              <span className="font-mono text-xs mr-2">{v.reference}</span>
+                              {v.name}
+                              {Number(v.weight) > 0
+                                ? <span className="ml-2 text-muted-foreground text-xs">· {fmtKg(v.weight)}/u.</span>
+                                : <span className="ml-2 text-warning text-xs">· poids manquant</span>
+                              }
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input
+                      type="number" min="1" className="w-20"
+                      value={l.quantity}
+                      onChange={(e) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, quantity: parseInt(e.target.value, 10) || 0 } : x)))}
+                    />
+                    <div className="w-24 text-right text-sm tabular text-muted-foreground">
+                      {lineWeight !== null ? fmtKg(lineWeight) : "—"}
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => setLines((arr) => arr.filter((_, j) => j !== i))} disabled={lines.length === 1}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                   </div>
-                  <Input
-                    type="number" min="1" className="w-24"
-                    value={l.quantity}
-                    onChange={(e) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, quantity: parseInt(e.target.value, 10) || 0 } : x)))}
-                  />
-                  <Button variant="ghost" size="icon" onClick={() => setLines((arr) => arr.filter((_, j) => j !== i))} disabled={lines.length === 1}>
-                    <Trash2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-            <div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Poids total estimé</div>
-              <div className="font-display text-lg font-semibold tabular">{fmtKg(totals.weight)}</div>
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1.5">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Palettes estimées</span>
+              <span className="tabular font-medium text-foreground">{totals.palettes > 0 ? totals.palettes : "—"}</span>
             </div>
+            <div className="flex justify-between border-t border-border pt-1.5">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Poids total estimé</span>
+              <span className="font-display text-lg font-semibold tabular">{fmtKg(totals.weight)}</span>
+            </div>
+            {totals.hasZeroWeight && totals.items.length > 0 && (
+              <p className="text-xs text-warning mt-1">
+                ⚠ Un ou plusieurs produits n'ont pas de poids renseigné. Complétez-les dans la fiche coffret.
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>
