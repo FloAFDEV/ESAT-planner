@@ -950,10 +950,60 @@ function NewShipmentDialog() {
   const totalWeight = productWeight + palletTareWeight;
   const hasZeroWeight = lineItems.some((it) => it.weight === 0) && lineItems.length > 0;
 
-  // Validation palette par palette
+  // Suggestion automatique : ceil(qty / nb_par_palette) par variant
+  const palletSuggestion = useMemo(() => {
+    const validLines = lines.filter((l) => l.product_variant_id && l.quantity > 0);
+    if (validLines.length === 0 || !variants.data) return null;
+
+    // Aggregate by variant
+    const byVariant = new Map<string, { qty: number; vd: any }>();
+    for (const l of validLines) {
+      const vd = (variants.data as any[]).find((v: any) => v.id === l.product_variant_id);
+      const cur = byVariant.get(l.product_variant_id);
+      if (cur) cur.qty += l.quantity;
+      else byVariant.set(l.product_variant_id, { qty: l.quantity, vd });
+    }
+
+    const details: { reference: string; name: string; qty: number; maxPerPallet: number; palletsNeeded: number }[] = [];
+    let totalNeeded = 0;
+    for (const [, { qty, vd }] of byVariant) {
+      const max = Number(vd?.nb_par_palette ?? 0);
+      if (max <= 0) continue;
+      const n = Math.ceil(qty / max);
+      totalNeeded += n;
+      details.push({ reference: vd?.reference ?? "?", name: vd?.name ?? "?", qty, maxPerPallet: max, palletsNeeded: n });
+    }
+    if (details.length === 0) return null;
+
+    // Recommend palette type: prefer EUR label, else first
+    const pts = (paletteTypes.data ?? []) as any[];
+    const recommended = pts.find((pt: any) => /eur/i.test(pt.label)) ?? pts[0] ?? null;
+    return { totalNeeded, details, recommended };
+  }, [lines, variants.data, paletteTypes.data]);
+
+  function applySuggestion() {
+    if (!palletSuggestion) return;
+    const { totalNeeded, recommended } = palletSuggestion;
+    setPallets(
+      Array.from({ length: totalNeeded }, () =>
+        recommended
+          ? {
+              label: "",
+              palette_type_id: recommended.id,
+              tare_weight: String(recommended.poids_max ?? ""),
+              longueur: String(recommended.length ?? ""),
+              largeur: String(recommended.width ?? ""),
+            }
+          : emptyPallet()
+      )
+    );
+  }
+
+  // Validation palette par palette — tare obligatoire pour tous, dimensions uniquement pour custom
   const palletErrors = useMemo(() => pallets.map((p) => {
-    if (!p.tare_weight || Number(p.tare_weight) <= 0) return "Poids tare requis";
-    if (p.palette_type_id === "custom" && (!p.longueur || !p.largeur)) return "Dimensions requises (palette personnalisée)";
+    const isCustom = p.palette_type_id === "custom";
+    if (isCustom && (!p.tare_weight || Number(p.tare_weight) <= 0)) return "Poids vide requis";
+    if (isCustom && (!p.longueur || !p.largeur)) return "Dimensions requises (palette personnalisée)";
     return null;
   }), [pallets]);
 
@@ -1123,6 +1173,31 @@ function NewShipmentDialog() {
                 <Plus className="h-3.5 w-3.5" /> Palette
               </Button>
             </div>
+
+            {/* Suggestion automatique */}
+            {palletSuggestion && (
+              <div className="rounded-md border border-info/40 bg-info/5 px-3 py-2.5 mb-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-info">
+                    Suggestion : {palletSuggestion.totalNeeded} palette{palletSuggestion.totalNeeded > 1 ? "s" : ""} nécessaire{palletSuggestion.totalNeeded > 1 ? "s" : ""}
+                    {palletSuggestion.recommended && (
+                      <span className="ml-1 text-muted-foreground font-normal">· type {palletSuggestion.recommended.label}</span>
+                    )}
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={applySuggestion}>
+                    Appliquer
+                  </Button>
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {palletSuggestion.details.map((d, i) => (
+                    <li key={i}>
+                      <span className="font-mono">{d.reference}</span> — {d.qty} u. ÷ {d.maxPerPallet}/pal. = <span className="font-medium text-foreground">{d.palletsNeeded} pal.</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {pallets.length === 0 && (
               <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                 ⚠ Au moins une palette est requise pour créer un shipment.
