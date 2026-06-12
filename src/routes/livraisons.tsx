@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil } from "lucide-react";
+import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers } from "lucide-react";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
@@ -366,6 +366,12 @@ function LivraisonsPage() {
                   <Button size="sm" variant="outline" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
                   <Button size="sm" variant="outline" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
                   <Button size="sm" variant="outline" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
+                  <Link to="/livraisons/$id" params={{ id: s.id }}>
+                    <Button size="sm" variant="secondary" className="gap-1.5">
+                      <Layers className="h-3.5 w-3.5" />
+                      Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
+                    </Button>
+                  </Link>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -389,8 +395,10 @@ function LivraisonsPage() {
                       ))}
                       <tr className="border-t-2 border-border bg-muted/30 font-semibold">
                         <td className="p-2">Total</td>
-                        <td className="p-2 text-right tabular">{fmtPalette(s.pallet_count)}</td>
-                        <td className="p-2 text-right tabular">{fmtKg(s.total_weight ?? 0)}</td>
+                        <td className="p-2 text-right tabular">
+                          {fmtInt((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.quantity ?? 0), 0))} u.
+                        </td>
+                        <td className="p-2 text-right tabular">{fmtKg((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.displayWeight ?? 0), 0))}</td>
                       </tr>
                     </tbody>
                   </table>
