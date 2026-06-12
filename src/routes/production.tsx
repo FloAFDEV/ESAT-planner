@@ -855,154 +855,166 @@ function ProductionPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-base">Suivi fabrication</CardTitle>
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold">Suivi fabrication
+            {orders.data && <span className="ml-2 text-xs font-normal text-muted-foreground">({(orders.data as any[]).length} OF{(orders.data as any[]).length !== 1 ? "s" : ""})</span>}
+          </h2>
           <Button size="sm" variant="outline" onClick={openArchiveDialog} className="flex items-center gap-2">
             <Archive className="h-4 w-4" /> Archiver
           </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-xs uppercase tracking-wider text-muted-foreground backdrop-blur">
-                <tr>
-                  <th className="text-left p-3">Coffret</th>
-                  <th className="text-right p-3">Qté</th>
-                  <th className="text-right p-3">Produit</th>
-                  <th className="text-center p-3">Priorité</th>
-                  <th className="text-center p-3">Statut</th>
-                  <th className="text-right p-3">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(orders.data ?? []).length === 0 ? (
-                  <tr>
-                    <td className="p-4 text-sm text-muted-foreground" colSpan={5}>
-                      <div className="flex flex-col items-center gap-2 py-2 text-center">
-                        <span>Aucune donnée disponible</span>
-                        <Link to="/production" className="inline-flex items-center rounded-sm border border-input px-2 py-0.5 text-xs hover:bg-accent hover:text-accent-foreground">Créer fabrication</Link>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (orders.data ?? []).map((o: any) => (
-                  (() => {
-                    const status = String(o.status);
-                    const canStart  = status === "draft" || status === "priority";
-                    const canFinish = status === "in_progress" || status === "partial";
-                    const canCancel = status === "draft" || status === "priority"
-                                   || status === "in_progress" || status === "partial";
-                    const snapshot = o.coffret_snapshot as { reference?: string; name?: string } | null;
-                    const coffretName = o.coffret?.name ?? snapshot?.name ?? "Coffret archivé";
-                    const coffretRef = o.coffret?.reference ?? snapshot?.reference ?? "—";
+        </div>
 
-                    return (
-                      <tr key={o.id} className="border-t border-border">
-                        <td className="p-3">
-                          <div className="font-medium">{coffretName}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{coffretRef}</div>
-                        </td>
-                        <td className="p-3 text-right tabular font-semibold">{fmtInt(o.quantity)}</td>
-                        <td className="p-3 text-right tabular text-sm text-muted-foreground">
-                          {o.produced_qty > 0 ? fmtInt(o.produced_qty) : <span className="opacity-40">—</span>}
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${Number(o.priority ?? 0) === 1 ? "border-destructive/30 bg-destructive/15 text-destructive" : "border-border bg-muted text-muted-foreground"}`}>
-                            {Number(o.priority ?? 0) === 1 ? "Urgent" : "Normal"}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground border border-border"}`}>
-                              {productionStatusMeta[status]?.label ?? "Statut inconnu"}
-                            </span>
-                            {o.can_start_now === false && canStart && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center gap-1 rounded-sm border border-warning/30 bg-warning/15 text-warning px-2 py-0.5 text-[11px] font-medium cursor-help">
-                                    <AlertTriangle className="h-3 w-3" /> Déficit stock
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent className="max-w-[240px] text-xs">
-                                  Stock insuffisant lors de la planification — état au moment de la création.
-                                  Réapprovisionner avant de démarrer.
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="inline-flex gap-1.5">
-                            {canStart && (
-                              <Button size="sm" variant="outline" onClick={() => transition.mutate({ id: o.id, status: "in_progress" })} disabled={transition.isPending}>
-                                Démarrer
-                              </Button>
-                            )}
-                            {canFinish && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={finish.isPending}
-                                onClick={() => {
-                                  setValidateQty(String(o.quantity - o.produced_qty));
-                                  setValidateTarget({
-                                    id: o.id,
-                                    quantity: o.quantity,
-                                    produced_qty: o.produced_qty,
-                                    coffretName: o.coffret?.name ?? "—",
-                                  });
-                                }}
-                              >
-                                Valider
-                              </Button>
-                            )}
-                            {canCancel && (
-                              <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => cancelOrder.mutate(o.id)} disabled={cancelOrder.isPending}>
-                                Annuler
-                              </Button>
-                            )}
-                            {status === "canceled" && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-destructive hover:text-destructive"
-                                    disabled={deleteOrder.isPending}
-                                    onClick={() => deleteOrder.mutate(o.id)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs">Supprimer définitivement</TooltipContent>
-                              </Tooltip>
-                            )}
-                            {status === "done" && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => openDeleteOfDialog(o)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs">Supprimer définitivement</TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })()
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+        {(orders.data ?? []).length === 0 && (
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-muted-foreground space-y-2">
+              <p>Aucun ordre de fabrication en cours.</p>
+              <p className="text-xs">Utilisez le formulaire ci-dessus pour créer une fabrication.</p>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {(orders.data ?? []).map((o: any) => {
+            const status = String(o.status);
+            const canStart  = status === "draft" || status === "priority";
+            const canFinish = status === "in_progress" || status === "partial";
+            const canCancel = status === "draft" || status === "priority"
+                           || status === "in_progress" || status === "partial";
+            const snapshot = o.coffret_snapshot as { reference?: string; name?: string } | null;
+            const coffretName = o.coffret?.name ?? snapshot?.name ?? "Coffret archivé";
+            const coffretRef  = o.coffret?.reference ?? snapshot?.reference ?? "—";
+            const isUrgent = Number(o.priority ?? 0) === 1;
+            const producedQty = Number(o.produced_qty ?? 0);
+            const progress = o.quantity > 0 ? Math.min(100, Math.round((producedQty / o.quantity) * 100)) : 0;
+            const showProgress = canFinish || status === "done";
+
+            return (
+              <div
+                key={o.id}
+                className={`rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md flex flex-col ${isUrgent ? "border-destructive/40" : "border-border"}`}
+              >
+                {/* Header */}
+                <div className={`flex items-start justify-between gap-2 px-4 pt-4 pb-3 border-b ${isUrgent ? "border-destructive/20 bg-destructive/5" : "border-border bg-muted/20"} rounded-t-lg`}>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-bold text-foreground">{o.reference ?? o.id.slice(0, 8)}</span>
+                      {isUrgent && (
+                        <span className="inline-flex items-center rounded-sm border border-destructive/30 bg-destructive/15 text-destructive px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          URGENT
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {new Date(o.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                  <span className={`inline-flex items-center shrink-0 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground border-border"}`}>
+                    {productionStatusMeta[status]?.label ?? status}
+                  </span>
+                </div>
+
+                {/* Body */}
+                <div className="px-4 py-3 flex-1 space-y-3">
+                  {/* Coffret identity */}
+                  <div>
+                    <div className="font-semibold text-base leading-tight">{coffretName}</div>
+                    <div className="text-xs font-mono text-muted-foreground mt-0.5">{coffretRef}</div>
+                  </div>
+
+                  {/* Quantité */}
+                  <div className="flex items-baseline gap-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Quantité planifiée</div>
+                      <div className="text-2xl font-display font-bold tabular leading-none mt-0.5">{fmtInt(o.quantity)}</div>
+                    </div>
+                    {showProgress && producedQty > 0 && (
+                      <div className="text-sm text-muted-foreground">
+                        → <span className="font-medium text-foreground">{fmtInt(producedQty)}</span> produit{producedQty > 1 ? "s" : ""}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Barre de progression */}
+                  {showProgress && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>Avancement</span>
+                        <span className="tabular font-medium">{progress}%</span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${status === "done" ? "bg-success" : "bg-info"}`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Déficit stock */}
+                  {o.can_start_now === false && canStart && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="inline-flex items-center gap-1.5 rounded-sm border border-warning/30 bg-warning/10 text-warning px-2 py-1 text-xs font-medium cursor-help w-full">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          Déficit stock — démarrage bloqué
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[240px] text-xs">
+                        Stock insuffisant lors de la planification. Réapprovisionner avant de démarrer.
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+
+                {/* Footer actions */}
+                <div className="px-4 pb-4 pt-2 border-t border-border/60 flex flex-wrap gap-1.5">
+                  {canStart && (
+                    <Button size="sm" variant="default" className="flex-1" onClick={() => transition.mutate({ id: o.id, status: "in_progress" })} disabled={transition.isPending}>
+                      Démarrer
+                    </Button>
+                  )}
+                  {canFinish && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="flex-1"
+                      disabled={finish.isPending}
+                      onClick={() => {
+                        setValidateQty(String(o.quantity - producedQty));
+                        setValidateTarget({ id: o.id, quantity: o.quantity, produced_qty: producedQty, coffretName });
+                      }}
+                    >
+                      Valider
+                    </Button>
+                  )}
+                  {canCancel && (
+                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => cancelOrder.mutate(o.id)} disabled={cancelOrder.isPending}>
+                      Annuler
+                    </Button>
+                  )}
+                  {(status === "canceled" || status === "done") && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          disabled={deleteOrder.isPending}
+                          onClick={() => status === "done" ? openDeleteOfDialog(o) : deleteOrder.mutate(o.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="text-xs">Supprimer définitivement</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
 
     {/* ── Dialog archivage en masse ── */}
