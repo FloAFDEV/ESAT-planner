@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X } from "lucide-react";
+import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil } from "lucide-react";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
@@ -34,6 +34,7 @@ function LivraisonsPage() {
   const qc = useQueryClient();
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editShipment, setEditShipment] = useState<any | null>(null);
   const [shipSearch, setShipSearch] = useState("");
   const [shipStatus, setShipStatus] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -340,14 +341,25 @@ function LivraisonsPage() {
                     </span>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:bg-destructive/10"
-                  onClick={() => setDeleteId(s.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  {status !== "shipped" && status !== "delivered" && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setEditShipment(s)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteId(s.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -388,6 +400,13 @@ function LivraisonsPage() {
           );
         })}
       </div>
+
+      {editShipment && (
+        <EditShipmentDialog
+          shipment={editShipment}
+          onClose={() => setEditShipment(null)}
+        />
+      )}
 
       <Dialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
         <DialogContent>
@@ -668,6 +687,169 @@ function CreateClientDialog() {
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
           <Button onClick={() => create.mutate()} disabled={create.isPending}>Créer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () => void }) {
+  const sb = supabase as any;
+  const qc = useQueryClient();
+
+  const [clientId, setClientId] = useState<string>(shipment.client_id ?? "");
+  const [lines, setLines] = useState<ShipmentLineDraft[]>(
+    (shipment.lines ?? []).length > 0
+      ? (shipment.lines as any[]).map((l: any) => ({ product_variant_id: l.product_variant_id, quantity: l.quantity }))
+      : [{ product_variant_id: "", quantity: 1 }]
+  );
+
+  const clients = useQuery({
+    queryKey: ["clients"],
+    queryFn: async () => {
+      const { data, error } = await sb.from("clients").select("id,name").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const variants = useQuery({
+    queryKey: ["product_variants"],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("product_variants")
+        .select("id,reference,name,weight,nb_par_palette")
+        .order("reference");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const vMap = useMemo(() => {
+    const m = new Map<string, { weight: number; nb_par_palette: number }>();
+    (variants.data ?? []).forEach((v: any) =>
+      m.set(v.id, { weight: Number(v.weight ?? 0), nb_par_palette: Number(v.nb_par_palette ?? 0) })
+    );
+    return m;
+  }, [variants.data]);
+
+  const totals = useMemo(() => {
+    let weight = 0;
+    const items = lines
+      .filter((l) => l.product_variant_id && l.quantity > 0)
+      .map((l) => {
+        const v = vMap.get(l.product_variant_id);
+        const lineWeight = Number(l.quantity) * Number(v?.weight ?? 0);
+        weight += lineWeight;
+        return { ...l, weight: lineWeight };
+      });
+    return { items, weight, hasZeroWeight: items.some((it) => it.weight === 0) };
+  }, [lines, vMap]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!clientId) throw new Error("Client requis");
+      if (totals.items.length === 0) throw new Error("Ajoutez au moins une ligne");
+
+      await sb.from("shipments").update({ client_id: clientId, total_weight: totals.weight }).eq("id", shipment.id);
+      await sb.from("shipment_lines").delete().eq("shipment_id", shipment.id);
+      const { error: lineError } = await sb.from("shipment_lines").insert(
+        totals.items.map((it) => ({
+          shipment_id: shipment.id,
+          product_variant_id: it.product_variant_id,
+          quantity: it.quantity,
+          weight: it.weight,
+        }))
+      );
+      if (lineError) throw lineError;
+    },
+    onSuccess: () => {
+      toast.success("Shipment mis à jour");
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      onClose();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>Modifier le shipment</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Client</Label>
+            <Select value={clientId} onValueChange={setClientId}>
+              <SelectTrigger><SelectValue placeholder="Sélectionner un client" /></SelectTrigger>
+              <SelectContent>
+                {(clients.data ?? []).map((c: any) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Lignes</Label>
+              <Button variant="outline" size="sm" onClick={() => setLines((l) => [...l, { product_variant_id: "", quantity: 1 }])}>
+                <Plus className="h-3.5 w-3.5" /> Ligne
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {lines.map((l, i) => {
+                const v = vMap.get(l.product_variant_id);
+                const lineWeight = l.product_variant_id && l.quantity > 0
+                  ? Number(l.quantity) * Number(v?.weight ?? 0)
+                  : null;
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <Select value={l.product_variant_id} onValueChange={(val) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, product_variant_id: val } : x)))}>
+                        <SelectTrigger><SelectValue placeholder="Produit" /></SelectTrigger>
+                        <SelectContent>
+                          {(variants.data ?? []).map((v: any) => (
+                            <SelectItem key={v.id} value={v.id}>
+                              <span className="font-mono text-xs mr-2">{v.reference}</span>
+                              {v.name}
+                              {Number(v.weight) > 0
+                                ? <span className="ml-2 text-muted-foreground text-xs">· {fmtKg(v.weight)}/u.</span>
+                                : <span className="ml-2 text-warning text-xs">· poids manquant</span>
+                              }
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input
+                      type="number" min="1" className="w-20"
+                      value={l.quantity}
+                      onChange={(e) => setLines((arr) => arr.map((x, j) => (j === i ? { ...x, quantity: parseInt(e.target.value, 10) || 0 } : x)))}
+                    />
+                    <div className="w-24 text-right text-sm tabular text-muted-foreground">
+                      {lineWeight !== null ? fmtKg(lineWeight) : "—"}
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => setLines((arr) => arr.filter((_, j) => j !== i))} disabled={lines.length === 1}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1">
+            <div className="flex justify-between border-t border-border pt-1">
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Poids total estimé</span>
+              <span className="font-display text-lg font-semibold tabular">{fmtKg(totals.weight)}</span>
+            </div>
+            {totals.hasZeroWeight && totals.items.length > 0 && (
+              <p className="text-xs text-warning">⚠ Un ou plusieurs produits n'ont pas de poids renseigné.</p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Annuler</Button>
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>Enregistrer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
