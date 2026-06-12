@@ -894,15 +894,28 @@ function NewShipmentDialog() {
     },
   });
 
+  // Poids unitaire — chemin critique, sans nb_par_palette pour éviter 400 si migration absente
   const variants = useQuery({
-    queryKey: ["product_variants"],
+    queryKey: ["product_variants", "weights"],
     queryFn: async () => {
       const { data, error } = await sb
         .from("product_variants")
-        .select("id,reference,name,weight,nb_par_palette")
+        .select("id,reference,name,weight")
         .order("reference");
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Capacité par palette — requête séparée, échec silencieux (suggestion seulement)
+  const variantsCapacity = useQuery({
+    queryKey: ["product_variants", "capacity"],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("product_variants")
+        .select("id,nb_par_palette");
+      if (error) return [] as any[];
+      return (data ?? []) as any[];
     },
   });
 
@@ -918,12 +931,21 @@ function NewShipmentDialog() {
   const ptMap = useMemo(() => new Map((paletteTypes.data ?? []).map((p: any) => [p.id, p])), [paletteTypes.data]);
 
   const vMap = useMemo(() => {
-    const m = new Map<string, { weight: number; nb_par_palette: number }>();
+    const m = new Map<string, { weight: number }>();
     (variants.data ?? []).forEach((v: any) =>
-      m.set(v.id, { weight: Number(v.weight ?? 0), nb_par_palette: Number(v.nb_par_palette ?? 0) })
+      m.set(v.id, { weight: Number(v.weight ?? 0) })
     );
     return m;
   }, [variants.data]);
+
+  // Map capacité pour la suggestion — nullable, pas critique
+  const capacityMap = useMemo(() => {
+    const m = new Map<string, number>();
+    (variantsCapacity.data ?? []).forEach((v: any) =>
+      m.set(v.id, Number(v.nb_par_palette ?? 0))
+    );
+    return m;
+  }, [variantsCapacity.data]);
 
   const productWeight = useMemo(() => {
     return lines
@@ -966,8 +988,8 @@ function NewShipmentDialog() {
 
     const details: { reference: string; name: string; qty: number; maxPerPallet: number; palletsNeeded: number }[] = [];
     let totalNeeded = 0;
-    for (const [, { qty, vd }] of byVariant) {
-      const max = Number(vd?.nb_par_palette ?? 0);
+    for (const [vid, { qty, vd }] of byVariant) {
+      const max = capacityMap.get(vid) ?? 0;
       if (max <= 0) continue;
       const n = Math.ceil(qty / max);
       totalNeeded += n;
@@ -979,7 +1001,7 @@ function NewShipmentDialog() {
     const pts = (paletteTypes.data ?? []) as any[];
     const recommended = pts.find((pt: any) => /eur/i.test(pt.label)) ?? pts[0] ?? null;
     return { totalNeeded, details, recommended };
-  }, [lines, variants.data, paletteTypes.data]);
+  }, [lines, variants.data, capacityMap, paletteTypes.data]);
 
   function applySuggestion() {
     if (!palletSuggestion) return;
@@ -990,7 +1012,8 @@ function NewShipmentDialog() {
           ? {
               label: "",
               palette_type_id: recommended.id,
-              tare_weight: String(recommended.poids_max ?? ""),
+              // tare_weight = poids vide de la palette (pas poids_max = charge max)
+              tare_weight: String(recommended.tare_weight ?? ""),
               longueur: String(recommended.length ?? ""),
               largeur: String(recommended.width ?? ""),
             }
@@ -1019,7 +1042,8 @@ function NewShipmentDialog() {
     setPallets((arr) => arr.map((p, j) => j === i ? {
       ...p,
       palette_type_id: typeId,
-      tare_weight: pt ? String(pt.poids_max ?? "") : p.tare_weight,
+      // tare_weight = poids vide de la palette (champ tare_weight, pas poids_max qui est la charge max)
+      tare_weight: pt ? String(pt.tare_weight ?? "") : p.tare_weight,
       longueur: pt ? String(pt.length ?? "") : p.longueur,
       largeur: pt ? String(pt.width ?? "") : p.largeur,
     } : p));
@@ -1225,7 +1249,7 @@ function NewShipmentDialog() {
                             <SelectItem value="custom">Personnalisée…</SelectItem>
                             {(paletteTypes.data ?? []).map((pt: any) => (
                               <SelectItem key={pt.id} value={pt.id}>
-                                {pt.label} · {pt.length}×{pt.width}cm · {pt.poids_max}kg
+                                {pt.label} · {pt.length}×{pt.width}cm · tare {pt.tare_weight}kg
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1236,12 +1260,14 @@ function NewShipmentDialog() {
                       </Button>
                     </div>
 
-                    {/* Standard : affichage read-only des valeurs figées */}
+                    {/* Standard : affichage read-only des valeurs figées depuis DB */}
                     {!isCustom && pt && (
                       <div className="flex gap-4 text-xs text-muted-foreground bg-muted/40 rounded px-2 py-1.5">
                         <span>{pt.length} × {pt.width} cm</span>
                         <span>·</span>
-                        <span>Tare : <span className="font-medium text-foreground">{fmtKg(pt.poids_max)}</span></span>
+                        <span>Tare : <span className="font-medium text-foreground">{fmtKg(pt.tare_weight)}</span></span>
+                        <span>·</span>
+                        <span>Charge max : {fmtKg(pt.poids_max)}</span>
                       </div>
                     )}
 
