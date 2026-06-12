@@ -417,7 +417,7 @@ function LivraisonsPage() {
       )}
 
       <Dialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Supprimer l'expédition ?</DialogTitle>
           </DialogHeader>
@@ -666,7 +666,7 @@ function CreateClientDialog() {
       <DialogTrigger asChild>
         <Button variant="outline">Nouveau client</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Créer un client</DialogTitle></DialogHeader>
         <div className="space-y-3 py-1">
           <div className="space-y-1">
@@ -781,7 +781,7 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Modifier le shipment</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
@@ -866,14 +866,14 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
 
 type PalletDraft = {
   label: string;
-  palette_type_id: string; // "" = custom
+  palette_type_id: string; // "custom" = personnalisée
   tare_weight: string;
   longueur: string;
   largeur: string;
 };
 
 function emptyPallet(): PalletDraft {
-  return { label: "", palette_type_id: "", tare_weight: "", longueur: "", largeur: "" };
+  return { label: "", palette_type_id: "custom", tare_weight: "", longueur: "", largeur: "" };
 }
 
 function NewShipmentDialog() {
@@ -953,7 +953,7 @@ function NewShipmentDialog() {
   // Validation palette par palette
   const palletErrors = useMemo(() => pallets.map((p) => {
     if (!p.tare_weight || Number(p.tare_weight) <= 0) return "Poids tare requis";
-    if (!p.palette_type_id && (!p.longueur || !p.largeur)) return "Dimensions requises (palette personnalisée)";
+    if (p.palette_type_id === "custom" && (!p.longueur || !p.largeur)) return "Dimensions requises (palette personnalisée)";
     return null;
   }), [pallets]);
 
@@ -988,7 +988,7 @@ function NewShipmentDialog() {
       if (pallets.length === 0) throw new Error("Au moins une palette est requise");
       for (const p of pallets) {
         if (!p.tare_weight || Number(p.tare_weight) <= 0) throw new Error("Toutes les palettes doivent avoir un poids tare > 0");
-        if (!p.palette_type_id && (!p.longueur || !p.largeur)) throw new Error("Les palettes personnalisées doivent avoir longueur et largeur");
+        if (p.palette_type_id === "custom" && (!p.longueur || !p.largeur)) throw new Error("Les palettes personnalisées doivent avoir longueur et largeur");
       }
 
       // total_weight sera recalculé par trigger DB — on envoie 0 comme placeholder
@@ -1041,7 +1041,7 @@ function NewShipmentDialog() {
       <DialogTrigger asChild>
         <Button><Plus className="h-4 w-4" /> Nouveau shipment</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Nouveau shipment</DialogTitle></DialogHeader>
         <div className="space-y-5 py-2">
 
@@ -1151,7 +1151,7 @@ function NewShipmentDialog() {
                         <Select value={p.palette_type_id} onValueChange={(v) => selectPalletType(i, v)}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Personnalisée</SelectItem>
+                            <SelectItem value="custom">Personnalisée</SelectItem>
                             {(paletteTypes.data ?? []).map((pt: any) => (
                               <SelectItem key={pt.id} value={pt.id}>
                                 {pt.label} · {pt.length}×{pt.width}cm · {pt.poids_max}kg
