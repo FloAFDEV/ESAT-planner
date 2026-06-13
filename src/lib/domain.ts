@@ -1,6 +1,7 @@
 export type ProductionStatus =
   | "draft"
   | "priority"
+  | "pending_material"
   | "in_progress"
   | "partial"
   | "done"
@@ -50,8 +51,8 @@ export function normalizeProductionStatus(status?: string | null): ProductionSta
   const value = String(status ?? "draft");
   // Canoniques directs
   if (
-    value === "draft" || value === "priority" || value === "in_progress" ||
-    value === "partial" || value === "done" || value === "canceled"
+    value === "draft" || value === "priority" || value === "pending_material" ||
+    value === "in_progress" || value === "partial" || value === "done" || value === "canceled"
   ) return value;
   // Legacy → canonical
   if (value === "annule") return "canceled";

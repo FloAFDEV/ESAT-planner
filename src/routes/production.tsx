@@ -180,33 +180,31 @@ function ProductionPage() {
     },
   });
 
-  // OF en déficit matière (can_start_now = false, encore démarrables)
-  const deficitOrders = useMemo(
-    () => (orders.data ?? []).filter((o: any) =>
-      o.can_start_now === false && (o.status === "draft" || o.status === "priority")
-    ),
+  // OF en attente matière (statut DB réel)
+  const pendingMaterialOrders = useMemo(
+    () => (orders.data ?? []).filter((o: any) => o.status === "pending_material"),
     [orders.data]
   );
 
   const deficitChecks = useQuery({
-    queryKey: ["deficit_checks", deficitOrders.map((o: any) => o.id)],
+    queryKey: ["deficit_checks", pendingMaterialOrders.map((o: any) => o.id)],
     queryFn: async () => {
       const results = await Promise.all(
-        deficitOrders.map(async (o: any) => ({
+        pendingMaterialOrders.map(async (o: any) => ({
           orderId: o.id,
           feasibility: await getProductionFeasibility(o.coffret_id, o.quantity),
         }))
       );
       return new Map(results.map((r) => [r.orderId, r.feasibility]));
     },
-    enabled: deficitOrders.length > 0,
+    enabled: pendingMaterialOrders.length > 0,
     staleTime: 30_000,
   });
 
   const createFabrication = useMutation({
     retry: 0,  // jamais de retry auto : la clé d'idempotence couvre les erreurs réseau
     mutationFn: async () => {
-      const results: Array<{ can_start_now: boolean }> = [];
+      const results: Array<{ ok: boolean }> = [];
       for (const row of validRows) {
         const p = urgent ? 1 : 0;
         const { data, error } = await sb.rpc("create_production_order_atomic", {
@@ -226,17 +224,12 @@ function ProductionPage() {
             .update({ client_of_reference: clientOfRef.trim() })
             .eq("id", data.order_id);
         }
-        results.push({ can_start_now: data?.can_start_now !== false });
+        results.push({ ok: true });
       }
       return results;
     },
     onSuccess: (results) => {
-      const hasDeficit = results.some((r) => !r.can_start_now);
-      if (hasDeficit) {
-        toast.warning(MSG.OF_PLANNED_DEFICIT);
-      } else {
-        toast.success(MSG.OF_CREATED);
-      }
+      toast.success(MSG.OF_CREATED);
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
@@ -257,41 +250,14 @@ function ProductionPage() {
       });
       if (error) throw error;
       if (data && data.success === false) throw new Error(data.error || "Transition impossible");
+      return data as { status?: string; missing_count?: number } | null;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const finalStatus = data?.status;
+      if (finalStatus === "in_progress") toast.success(MSG.OF_STARTED);
+      else if (finalStatus === "pending_material") toast.warning(MSG.OF_LAUNCH_PENDING, { duration: 6000 });
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const resumeOrder = useMutation({
-    retry: 0,
-    mutationFn: async ({ id, coffretId, quantity }: { id: string; coffretId: string; quantity: number }) => {
-      // Re-vérifie la faisabilité en temps réel
-      const feasibility = await getProductionFeasibility(coffretId, quantity);
-      if (!feasibility.can_produce) {
-        // Stock encore insuffisant — on retourne les manquants pour affichage
-        return { ok: false, missing: feasibility.missing };
-      }
-      // Stock OK — tente la transition
-      const { data, error } = await sb.rpc("transition_production_order_status", {
-        p_order_id: id,
-        p_status:   "in_progress",
-      });
-      if (error) throw error;
-      if (data && data.success === false) throw new Error(data.error || "Transition impossible");
-      return { ok: true, missing: [] };
-    },
-    onSuccess: (result) => {
-      if (result.ok) {
-        toast.success(MSG.OF_RESUMED);
-        qc.invalidateQueries({ queryKey: ["production_orders"] });
-        qc.invalidateQueries({ queryKey: ["composants"] });
-      } else {
-        const list = result.missing.map((m: any) => `${m.reference || m.name} → manque ${m.missing}`).join("\n");
-        toast.warning(MSG.OF_STILL_MISSING(list), { duration: 8000 });
-      }
       qc.invalidateQueries({ queryKey: ["deficit_checks"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -920,23 +886,8 @@ function ProductionPage() {
             />
           </div>
 
-          {validRows.some((r) => {
-            const c = checksByRow.get(r.id);
-            return c && !c.ok && c.missing.length > 0;
-          }) && (
-            <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                Il manque des pièces pour certains coffrets. La fabrication sera créée mais ne pourra pas démarrer tant que le stock n'est pas réapprovisionné.
-              </span>
-            </div>
-          )}
-
           <Button className="w-full" onClick={() => createFabrication.mutate()} disabled={!canCreate || createFabrication.isPending}>
-            {validRows.some((r) => {
-              const c = checksByRow.get(r.id);
-              return c && !c.ok && c.missing.length > 0;
-            }) ? "Planifier (stock insuffisant)" : "Créer fabrication"}
+            Créer fabrication
           </Button>
         </CardContent>
       </Card>
@@ -980,8 +931,8 @@ function ProductionPage() {
             const poidsTotal = poidsUnitaire > 0 ? poidsUnitaire * o.quantity : null;
             const ofRef = o.reference ?? o.id.slice(0, 8);
             const clientOfRef = o.client_of_reference as string | null | undefined;
-            const isPendingMaterial = o.can_start_now === false && canStart;
-            const displayStatus = isPendingMaterial ? "pending_material" : status;
+            const isPendingMaterial = status === "pending_material";
+            const displayStatus = status;
             const missingParts = isPendingMaterial ? (deficitChecks.data?.get(o.id)?.missing ?? null) : null;
 
             return (
@@ -1155,20 +1106,20 @@ function ProductionPage() {
 
                 {/* Footer actions */}
                 <div className="px-4 pb-4 pt-2 border-t border-border/60 flex flex-wrap gap-1.5">
-                  {canStart && isPendingMaterial && (
+                  {isPendingMaterial && (
                     <Button
                       size="sm"
                       variant="outline"
                       className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700"
-                      onClick={() => resumeOrder.mutate({ id: o.id, coffretId: o.coffret_id, quantity: o.quantity })}
-                      disabled={resumeOrder.isPending}
+                      onClick={() => transition.mutate({ id: o.id, status: "in_progress" })}
+                      disabled={transition.isPending}
                     >
                       Relancer (vérifier stock)
                     </Button>
                   )}
-                  {canStart && !isPendingMaterial && (
+                  {canStart && (
                     <Button size="sm" variant="default" className="flex-1" onClick={() => transition.mutate({ id: o.id, status: "in_progress" })} disabled={transition.isPending}>
-                      Démarrer
+                      Lancer fabrication
                     </Button>
                   )}
                   {canFinish && (
