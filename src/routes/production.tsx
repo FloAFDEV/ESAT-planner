@@ -1164,7 +1164,7 @@ function ProductionPage() {
                       onClick={() => resumeOrder.mutate({ id: o.id, coffretId: o.coffret_id, quantity: o.quantity })}
                       disabled={resumeOrder.isPending}
                     >
-                      Reprendre fabrication
+                      Relancer (vérifier stock)
                     </Button>
                   )}
                   {canStart && !isPendingMaterial && (

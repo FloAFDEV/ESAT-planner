@@ -4,9 +4,9 @@
 export const MSG = {
   // ── Fabrication / Production ────────────────────────────────────────────────
   OF_CREATED:               "Fabrication créée — stock réservé",
-  OF_PLANNED_DEFICIT:       "OF planifié — stock insuffisant au moment de la création (voir liste)",
+  OF_PLANNED_DEFICIT:       "Fabrication créée, mais il manque des pièces. Vérifiez la carte.",
   OF_STARTED:               "Fabrication démarrée",
-  OF_RESUMED:               "Stock complet — fabrication démarrée",
+  OF_RESUMED:               "Pièces disponibles — fabrication lancée",
   OF_CANCELED:              "Fabrication annulée — réservations libérées",
   OF_DELETED:               "Fabrication supprimée",
   OF_DONE:                  "Fabrication terminée — stock mis à jour",
@@ -15,8 +15,8 @@ export const MSG = {
   OF_EXPORT_EMPTY:          "Aucun OF à exporter",
   OF_EXPORT_OK:             "Export CSV téléchargé",
   OF_PARTIAL:               (produced: number | string, total: number | string) =>
-                              `Validation partielle : ${produced}/${total}`,
-  OF_STILL_MISSING:         (list: string) => `Stock encore insuffisant :\n${list}`,
+                              `${produced} coffret${Number(produced) > 1 ? "s" : ""} fabriqué${Number(produced) > 1 ? "s" : ""} sur ${total} demandé${Number(total) > 1 ? "s" : ""}`,
+  OF_STILL_MISSING:         (list: string) => `Il manque encore des pièces :\n${list}`,
   OF_QTY_REQUIRED:          "Saisissez au moins une quantité",
 
   // ── Expéditions / Livraisons ────────────────────────────────────────────────
