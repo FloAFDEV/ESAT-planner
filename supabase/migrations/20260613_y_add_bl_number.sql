@@ -23,7 +23,6 @@ SELECT
   c.name        AS client_name,
   s.total_weight,
   s.total_pallets,
-  s.notes,
   s.created_at,
   s.updated_at
 FROM public.shipments s
