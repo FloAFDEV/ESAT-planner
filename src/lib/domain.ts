@@ -19,7 +19,7 @@ export type ShipmentStatus = LivraisonStatus;
 export const productionStatusMeta: Record<string, { label: string; cls: string }> = {
   draft:            { label: "À produire",       cls: "bg-muted text-muted-foreground border border-border" },
   priority:         { label: "Urgent",           cls: "bg-destructive/15 text-destructive border border-destructive/30" },
-  pending_material: { label: "En attente matière", cls: "bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-700" },
+  pending_material: { label: "Pièces manquantes",  cls: "bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-700" },
   in_progress:      { label: "En cours",         cls: "bg-info/15 text-info border border-info/30" },
   partial:          { label: "Partiel",          cls: "bg-warning/15 text-warning border border-warning/30" },
   done:             { label: "Terminé",          cls: "bg-success/15 text-success border border-success/30" },
