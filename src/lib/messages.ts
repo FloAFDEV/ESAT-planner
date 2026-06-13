@@ -8,6 +8,8 @@ export const MSG = {
   OF_STARTED:               "Fabrication lancée",
   OF_RESUMED:               "Pièces disponibles — fabrication lancée",
   OF_LAUNCH_PENDING:        "Lancement enregistré — certaines pièces manquent encore",
+  OF_SPLIT:                 (launched: number, pending: number, ref: string) =>
+                              `${launched} coffrets lancés — ${pending} en attente de stock (${ref})`,
   OF_CANCELED:              "Fabrication annulée — réservations libérées",
   OF_DELETED:               "Fabrication supprimée",
   OF_DONE:                  "Fabrication terminée — stock mis à jour",
