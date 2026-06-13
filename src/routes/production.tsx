@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, splitPalettes } from "@/lib/format";
 import { normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
@@ -920,7 +920,7 @@ function ProductionPage() {
             const progress = o.quantity > 0 ? Math.min(100, Math.round((producedQty / o.quantity) * 100)) : 0;
             const showProgress = canFinish || status === "done";
             const nbParPalette = Number(o.coffret?.nb_par_palette ?? 0);
-            const palettesEstimees = nbParPalette > 0 ? Math.ceil(o.quantity / nbParPalette) : null;
+            const paletteSplit = splitPalettes(o.quantity, nbParPalette);
             const poidsUnitaire = Number(o.coffret?.poids_coffret ?? 0);
             const poidsTotal = poidsUnitaire > 0 ? poidsUnitaire * o.quantity : null;
             const ofRef = o.reference ?? o.id.slice(0, 8);
@@ -1001,12 +1001,55 @@ function ProductionPage() {
                   </div>
 
                   {/* Logistique palettes — pour préparation BL */}
-                  {palettesEstimees !== null && (
-                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-1">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conditionnement estimé</div>
-                      <div className="flex items-center gap-3 flex-wrap text-sm">
-                        <span className="font-semibold text-foreground">{palettesEstimees} palette{palettesEstimees > 1 ? "s" : ""}</span>
-                        <span className="text-muted-foreground text-xs">({nbParPalette} u./pal.)</span>
+                  {paletteSplit !== null && (
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conditionnement</span>
+                        <span className="text-[11px] text-muted-foreground">{paletteSplit.capacite} u./pal.</span>
+                      </div>
+                      <div className="space-y-0.5 text-xs">
+                        {/* Palettes complètes — si resteType = "full", le reste compte aussi comme complète */}
+                        {(() => {
+                          const totalCompletes = paletteSplit.resteType === "full"
+                            ? paletteSplit.completes + 1
+                            : paletteSplit.completes;
+                          const unitsCompletes = paletteSplit.resteType === "full"
+                            ? paletteSplit.completes * paletteSplit.capacite + paletteSplit.reste
+                            : paletteSplit.completes * paletteSplit.capacite;
+                          return totalCompletes > 0 ? (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">
+                                {totalCompletes} palette{totalCompletes > 1 ? "s" : ""} complète{totalCompletes > 1 ? "s" : ""}
+                              </span>
+                              <span className="font-mono font-medium text-foreground tabular">{unitsCompletes} u.</span>
+                            </div>
+                          ) : null;
+                        })()}
+
+                        {/* Palette partielle qualifiée */}
+                        {paletteSplit.reste > 0 && paletteSplit.resteType !== "full" && (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className={paletteSplit.resteType === "demi" ? "text-info" : "text-warning"}>
+                                {paletteSplit.resteType === "demi" ? "Demi-palette" : "Palette partielle (mini)"}
+                              </span>
+                              <span className="font-mono font-medium text-foreground tabular">
+                                {paletteSplit.reste} / {paletteSplit.capacite} u.
+                              </span>
+                            </div>
+                            {paletteSplit.resteType === "mini" && (
+                              <div className="text-[10px] text-warning flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                Sous-optimisé — regroupement conseillé
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between border-t border-border/60 pt-1 mt-0.5">
+                          <span className="font-medium text-foreground">Total palettes physiques</span>
+                          <span className="font-mono font-bold text-foreground tabular">{paletteSplit.total}</span>
+                        </div>
                       </div>
                     </div>
                   )}
