@@ -62,6 +62,7 @@ function ProductionPage() {
 
   const [rows, setRows] = useState<ProdRow[]>([{ id: crypto.randomUUID(), coffret_id: "", quantity: 1 }]);
   const [urgent, setUrgent] = useState(false);
+  const [ofNotes, setOfNotes] = useState<string>("");
   const [exportOpen, setExportOpen] = useState(false);
   const [exportQtys, setExportQtys] = useState<Record<string, string>>({});
   const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({});
@@ -75,7 +76,7 @@ function ProductionPage() {
   const [deleteOfInput, setDeleteOfInput] = useState<string>("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiveOpenedAt, setArchiveOpenedAt] = useState<Date | null>(null);
-  const [archivePeriod, setArchivePeriod] = useState<"3m" | "6m" | "1an" | "tout">("3m");
+  const [archivePeriod, setArchivePeriod] = useState<"3m" | "6m" | "1an" | "tout">("tout");
   const [archiveIncludeDone, setArchiveIncludeDone] = useState(true);
   const [archiveIncludeCanceled, setArchiveIncludeCanceled] = useState(true);
   const [archiveCode, setArchiveCode] = useState<string>("");
@@ -109,12 +110,12 @@ function ProductionPage() {
 
         const feasibility = await getProductionFeasibility(row.coffret_id, row.quantity);
         const missing: Array<{ reference: string; name: string; manquant: number }> = feasibility.missing.map((item) => ({
-          reference: item.composant_id,
+          reference: item.reference || item.composant_id,
           name: item.name,
           manquant: item.missing,
         }));
         const remaining: Array<{ reference: string; name: string; apres_production: number }> = feasibility.components.map((item) => ({
-          reference: item.composant_id,
+          reference: item.reference || item.composant_id,
           name: item.name,
           apres_production: item.available - item.needed,
         }));
@@ -188,7 +189,7 @@ function ProductionPage() {
           p_quantity:        row.quantity,
           p_status:          urgent ? "priority" : "draft",
           p_priority:        p,
-          p_notes:           null,
+          p_notes:           ofNotes.trim() || null,
           p_idempotency_key: getIdempotencyKey(row.coffret_id, row.quantity, p),
         });
         if (error) throw error;
@@ -210,6 +211,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
       setRows([{ id: crypto.randomUUID(), coffret_id: "", quantity: 1 }]);
       setUrgent(false);
+      setOfNotes("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -625,7 +627,7 @@ function ProductionPage() {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Production</p>
-          <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Fabrication de coffrets</h1>
+          <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Fabrication</h1>
         </div>
         <Button variant="outline" onClick={openExportDialog} className="flex items-center gap-2 mt-2">
           <FileDown className="h-4 w-4" /> Export pièces manquantes
@@ -833,6 +835,17 @@ function ProductionPage() {
             <Switch checked={urgent} onCheckedChange={setUrgent} />
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Commentaire atelier</label>
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              rows={2}
+              placeholder="Instructions, numéro de lot, remarques…"
+              value={ofNotes}
+              onChange={(e) => setOfNotes(e.target.value)}
+            />
+          </div>
+
           {validRows.some((r) => {
             const c = checksByRow.get(r.id);
             return c && !c.ok && c.missing.length > 0;
@@ -921,6 +934,13 @@ function ProductionPage() {
                     <div className="font-semibold text-base leading-tight">{coffretName}</div>
                     <div className="text-xs font-mono text-muted-foreground mt-0.5">{coffretRef}</div>
                   </div>
+
+                  {/* Commentaire atelier */}
+                  {o.notes && (
+                    <div className="text-xs text-muted-foreground italic border-l-2 border-border pl-2">
+                      {o.notes}
+                    </div>
+                  )}
 
                   {/* Quantité */}
                   <div className="flex items-baseline gap-3">
