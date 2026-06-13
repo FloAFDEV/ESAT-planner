@@ -1008,22 +1008,46 @@ function ProductionPage() {
                         <span className="text-[11px] text-muted-foreground">{paletteSplit.capacite} u./pal.</span>
                       </div>
                       <div className="space-y-0.5 text-xs">
-                        {paletteSplit.completes > 0 && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">
-                              {paletteSplit.completes} palette{paletteSplit.completes > 1 ? "s" : ""} complète{paletteSplit.completes > 1 ? "s" : ""}
-                            </span>
-                            <span className="font-mono font-medium text-foreground tabular">{paletteSplit.completes * paletteSplit.capacite} u.</span>
+                        {/* Palettes complètes — si resteType = "full", le reste compte aussi comme complète */}
+                        {(() => {
+                          const totalCompletes = paletteSplit.resteType === "full"
+                            ? paletteSplit.completes + 1
+                            : paletteSplit.completes;
+                          const unitsCompletes = paletteSplit.resteType === "full"
+                            ? paletteSplit.completes * paletteSplit.capacite + paletteSplit.reste
+                            : paletteSplit.completes * paletteSplit.capacite;
+                          return totalCompletes > 0 ? (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground">
+                                {totalCompletes} palette{totalCompletes > 1 ? "s" : ""} complète{totalCompletes > 1 ? "s" : ""}
+                              </span>
+                              <span className="font-mono font-medium text-foreground tabular">{unitsCompletes} u.</span>
+                            </div>
+                          ) : null;
+                        })()}
+
+                        {/* Palette partielle qualifiée */}
+                        {paletteSplit.reste > 0 && paletteSplit.resteType !== "full" && (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className={paletteSplit.resteType === "demi" ? "text-info" : "text-warning"}>
+                                {paletteSplit.resteType === "demi" ? "Demi-palette" : "Palette partielle (mini)"}
+                              </span>
+                              <span className="font-mono font-medium text-foreground tabular">
+                                {paletteSplit.reste} / {paletteSplit.capacite} u.
+                              </span>
+                            </div>
+                            {paletteSplit.resteType === "mini" && (
+                              <div className="text-[10px] text-warning flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                Sous-optimisé — regroupement conseillé
+                              </div>
+                            )}
                           </div>
                         )}
-                        {paletteSplit.reste > 0 && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">1 palette partielle</span>
-                            <span className="font-mono font-medium text-foreground tabular">{paletteSplit.reste} u.</span>
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between border-t border-border/60 pt-1 mt-1">
-                          <span className="font-medium text-foreground">Total palettes</span>
+
+                        <div className="flex items-center justify-between border-t border-border/60 pt-1 mt-0.5">
+                          <span className="font-medium text-foreground">Total palettes physiques</span>
                           <span className="font-mono font-bold text-foreground tabular">{paletteSplit.total}</span>
                         </div>
                       </div>
