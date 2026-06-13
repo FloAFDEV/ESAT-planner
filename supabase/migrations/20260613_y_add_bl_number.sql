@@ -23,8 +23,7 @@ SELECT
   c.name        AS client_name,
   s.total_weight,
   s.total_pallets,
-  s.created_at,
-  s.updated_at
+  s.created_at
 FROM public.shipments s
 LEFT JOIN public.clients c ON c.id = s.client_id;
 
