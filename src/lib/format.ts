@@ -31,7 +31,7 @@ export function splitPalettes(qty: number, capaciteParPalette: number): PaletteS
   const resteType: PaletteResteType =
     reste === 0         ? "none" :
     ratio >= 0.75       ? "full" :
-    ratio > 0.25        ? "demi" :
+    ratio >= 0.25       ? "demi" :
                           "mini";
   return { completes, reste, resteType, total: completes + (reste > 0 ? 1 : 0), capacite: capaciteParPalette };
 }
