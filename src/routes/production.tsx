@@ -62,6 +62,7 @@ function ProductionPage() {
 
   const [rows, setRows] = useState<ProdRow[]>([{ id: crypto.randomUUID(), coffret_id: "", quantity: 1 }]);
   const [urgent, setUrgent] = useState(false);
+  const [clientOfRef, setClientOfRef] = useState<string>("");
   const [ofNotes, setOfNotes] = useState<string>("");
   const [exportOpen, setExportOpen] = useState(false);
   const [exportQtys, setExportQtys] = useState<Record<string, string>>({});
@@ -195,6 +196,12 @@ function ProductionPage() {
         if (error) throw error;
         if (data && data.success === false) throw new Error(data.error || "Création impossible");
         clearIdempotencyKey(row.coffret_id, row.quantity, p);
+        // Propagation OF client — UPDATE séparé pour ne pas modifier la RPC
+        if (clientOfRef.trim() && data?.order_id) {
+          await sb.from("production_orders")
+            .update({ client_of_reference: clientOfRef.trim() })
+            .eq("id", data.order_id);
+        }
         results.push({ can_start_now: data?.can_start_now !== false });
       }
       return results;
@@ -211,6 +218,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
       setRows([{ id: crypto.randomUUID(), coffret_id: "", quantity: 1 }]);
       setUrgent(false);
+      setClientOfRef("");
       setOfNotes("");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -827,6 +835,16 @@ function ProductionPage() {
             );
           })}
 
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Référence OF client <span className="text-muted-foreground font-normal">(optionnel)</span></label>
+            <Input
+              placeholder="ex: CMD-2026-042"
+              value={clientOfRef}
+              onChange={(e) => setClientOfRef(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">Référence externe transmise par le client — visible sur BL et suivi.</p>
+          </div>
+
           <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
             <div>
               <div className="text-sm font-medium">Priorité</div>
@@ -906,34 +924,41 @@ function ProductionPage() {
             const poidsUnitaire = Number(o.coffret?.poids_coffret ?? 0);
             const poidsTotal = poidsUnitaire > 0 ? poidsUnitaire * o.quantity : null;
             const ofRef = o.reference ?? o.id.slice(0, 8);
+            const clientOfRef = o.client_of_reference as string | null | undefined;
 
             return (
               <div
                 key={o.id}
                 className={`rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md flex flex-col ${isUrgent ? "border-destructive/40" : "border-border"}`}
               >
-                {/* Header — OF + statut */}
+                {/* Header — OF client (principal) + OF système + statut */}
                 <div className={`flex items-start justify-between gap-2 px-4 pt-4 pb-3 border-b ${isUrgent ? "border-destructive/20 bg-destructive/5" : "border-border bg-muted/20"} rounded-t-lg`}>
                   <div className="min-w-0 flex-1">
-                    {/* Numéro OF — zone principale, facilement sélectionnable */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* OF CLIENT — référence principale métier */}
+                    {clientOfRef ? (
                       <button
                         type="button"
                         className="group flex items-center gap-1.5 font-mono text-base font-bold text-foreground hover:text-info transition-colors cursor-copy"
-                        title="Copier le numéro d'OF"
-                        onClick={() => { navigator.clipboard.writeText(ofRef); toast.success(`OF ${ofRef} copié`); }}
+                        title="Copier la référence OF client"
+                        onClick={() => { navigator.clipboard.writeText(clientOfRef); toast.success(`OF client ${clientOfRef} copié`); }}
                       >
-                        {ofRef}
+                        {clientOfRef}
                         <Copy className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
                       </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">OF client non renseigné</span>
+                    )}
+                    {/* OF système — secondaire */}
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[11px] text-muted-foreground font-mono">{ofRef}</span>
                       {isUrgent && (
                         <span className="inline-flex items-center rounded-sm border border-destructive/30 bg-destructive/15 text-destructive px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           URGENT
                         </span>
                       )}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {new Date(o.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
+                      <span className="text-[11px] text-muted-foreground">
+                        {new Date(o.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
+                      </span>
                     </div>
                   </div>
                   <span className={`inline-flex items-center shrink-0 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground border-border"}`}>
