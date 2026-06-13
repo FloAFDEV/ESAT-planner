@@ -250,12 +250,23 @@ function ProductionPage() {
       });
       if (error) throw error;
       if (data && data.success === false) throw new Error(data.error || "Transition impossible");
-      return data as { status?: string; missing_count?: number } | null;
+      return data as {
+        status?: string;
+        split?: boolean;
+        qty_launched?: number;
+        qty_pending?: number;
+        split_reference?: string;
+        missing_count?: number;
+      } | null;
     },
     onSuccess: (data) => {
-      const finalStatus = data?.status;
-      if (finalStatus === "in_progress") toast.success(MSG.OF_STARTED);
-      else if (finalStatus === "pending_material") toast.warning(MSG.OF_LAUNCH_PENDING, { duration: 6000 });
+      if (data?.split) {
+        toast.success(MSG.OF_SPLIT(data.qty_launched!, data.qty_pending!, data.split_reference!), { duration: 8000 });
+      } else if (data?.status === "in_progress") {
+        toast.success(MSG.OF_STARTED);
+      } else if (data?.status === "pending_material") {
+        toast.warning(MSG.OF_LAUNCH_PENDING, { duration: 6000 });
+      }
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["deficit_checks"] });
