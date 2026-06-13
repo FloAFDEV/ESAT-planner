@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Archive, AlertTriangle, ChevronsUpDown, FileDown, Trash2 } from "lucide-react";
+import { Archive, AlertTriangle, ChevronsUpDown, Copy, FileDown, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -168,7 +168,7 @@ function ProductionPage() {
       if (ids.length > 0) {
         const { data: coffretsData, error: coffretsError } = await sb
           .from("coffrets")
-          .select("id,reference,name")
+          .select("id,reference,name,nb_par_palette,poids_coffret")
           .in("id", ids);
         if (coffretsError) throw coffretsError;
         coffretMap = new Map((coffretsData ?? []).map((c: any) => [c.id, c]));
@@ -901,17 +901,31 @@ function ProductionPage() {
             const producedQty = Number(o.produced_qty ?? 0);
             const progress = o.quantity > 0 ? Math.min(100, Math.round((producedQty / o.quantity) * 100)) : 0;
             const showProgress = canFinish || status === "done";
+            const nbParPalette = Number(o.coffret?.nb_par_palette ?? 0);
+            const palettesEstimees = nbParPalette > 0 ? Math.ceil(o.quantity / nbParPalette) : null;
+            const poidsUnitaire = Number(o.coffret?.poids_coffret ?? 0);
+            const poidsTotal = poidsUnitaire > 0 ? poidsUnitaire * o.quantity : null;
+            const ofRef = o.reference ?? o.id.slice(0, 8);
 
             return (
               <div
                 key={o.id}
                 className={`rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md flex flex-col ${isUrgent ? "border-destructive/40" : "border-border"}`}
               >
-                {/* Header */}
+                {/* Header — OF + statut */}
                 <div className={`flex items-start justify-between gap-2 px-4 pt-4 pb-3 border-b ${isUrgent ? "border-destructive/20 bg-destructive/5" : "border-border bg-muted/20"} rounded-t-lg`}>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-bold text-foreground">{o.reference ?? o.id.slice(0, 8)}</span>
+                  <div className="min-w-0 flex-1">
+                    {/* Numéro OF — zone principale, facilement sélectionnable */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        className="group flex items-center gap-1.5 font-mono text-base font-bold text-foreground hover:text-info transition-colors cursor-copy"
+                        title="Copier le numéro d'OF"
+                        onClick={() => { navigator.clipboard.writeText(ofRef); toast.success(`OF ${ofRef} copié`); }}
+                      >
+                        {ofRef}
+                        <Copy className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
+                      </button>
                       {isUrgent && (
                         <span className="inline-flex items-center rounded-sm border border-destructive/30 bg-destructive/15 text-destructive px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           URGENT
@@ -942,18 +956,35 @@ function ProductionPage() {
                     </div>
                   )}
 
-                  {/* Quantité */}
-                  <div className="flex items-baseline gap-3">
+                  {/* Quantité + poids total */}
+                  <div className="flex items-baseline gap-4">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Quantité planifiée</div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Qté planifiée</div>
                       <div className="text-2xl font-display font-bold tabular leading-none mt-0.5">{fmtInt(o.quantity)}</div>
                     </div>
+                    {poidsTotal !== null && (
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Poids produits</div>
+                        <div className="text-lg font-semibold tabular leading-none mt-0.5 text-foreground">{poidsTotal.toFixed(1)} kg</div>
+                      </div>
+                    )}
                     {showProgress && producedQty > 0 && (
                       <div className="text-sm text-muted-foreground">
-                        → <span className="font-medium text-foreground">{fmtInt(producedQty)}</span> produit{producedQty > 1 ? "s" : ""}
+                        → <span className="font-medium text-foreground">{fmtInt(producedQty)}</span> prod.
                       </div>
                     )}
                   </div>
+
+                  {/* Logistique palettes — pour préparation BL */}
+                  {palettesEstimees !== null && (
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-1">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conditionnement estimé</div>
+                      <div className="flex items-center gap-3 flex-wrap text-sm">
+                        <span className="font-semibold text-foreground">{palettesEstimees} palette{palettesEstimees > 1 ? "s" : ""}</span>
+                        <span className="text-muted-foreground text-xs">({nbParPalette} u./pal.)</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Barre de progression */}
                   {showProgress && (
