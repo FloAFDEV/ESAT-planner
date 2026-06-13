@@ -2,6 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MSG } from "@/lib/messages";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -149,7 +150,7 @@ function CoffretsPage() {
       return data.id as string;
     },
     onSuccess: (id) => {
-      toast.success("Coffret créé");
+      toast.success(MSG.COFFRET_CREATED);
       qc.invalidateQueries({ queryKey: ["coffrets"] });
       setNewCoffretOpen(false);
       setNewCoffretRef("");
@@ -172,7 +173,7 @@ function CoffretsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Coffret mis à jour");
+      toast.success(MSG.COFFRET_UPDATED);
       qc.invalidateQueries({ queryKey: ["coffrets"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -186,7 +187,7 @@ function CoffretsPage() {
       if (data && data.success === false) throw new Error(data.error || "Archivage impossible");
     },
     onSuccess: () => {
-      toast.success("Coffret archivé");
+      toast.success(MSG.COFFRET_ARCHIVED);
       qc.invalidateQueries({ queryKey: ["coffrets"] });
       setSelectedId("");
       setDeleteConfirmOpen(false);
@@ -206,7 +207,7 @@ function CoffretsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Composant créé");
+      toast.success(MSG.COMPOSANT_CREATED);
       qc.invalidateQueries({ queryKey: ["composants"] });
       setNewComposantOpen(false);
       setNewCompRef("");
@@ -233,7 +234,7 @@ function CoffretsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Composant ajouté");
+      toast.success(MSG.COMPOSANT_ADDED);
       setNewCompId("");
       setNewCompQty("1");
       invalidateBom();
@@ -256,7 +257,7 @@ function CoffretsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Composant retiré");
+      toast.success(MSG.COMPOSANT_REMOVED);
       invalidateBom();
     },
     onError: (e: Error) => toast.error(e.message),
