@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, splitPalettes } from "@/lib/format";
 import { normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
@@ -920,7 +920,7 @@ function ProductionPage() {
             const progress = o.quantity > 0 ? Math.min(100, Math.round((producedQty / o.quantity) * 100)) : 0;
             const showProgress = canFinish || status === "done";
             const nbParPalette = Number(o.coffret?.nb_par_palette ?? 0);
-            const palettesEstimees = nbParPalette > 0 ? Math.ceil(o.quantity / nbParPalette) : null;
+            const paletteSplit = splitPalettes(o.quantity, nbParPalette);
             const poidsUnitaire = Number(o.coffret?.poids_coffret ?? 0);
             const poidsTotal = poidsUnitaire > 0 ? poidsUnitaire * o.quantity : null;
             const ofRef = o.reference ?? o.id.slice(0, 8);
@@ -1001,12 +1001,31 @@ function ProductionPage() {
                   </div>
 
                   {/* Logistique palettes — pour préparation BL */}
-                  {palettesEstimees !== null && (
-                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-1">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conditionnement estimé</div>
-                      <div className="flex items-center gap-3 flex-wrap text-sm">
-                        <span className="font-semibold text-foreground">{palettesEstimees} palette{palettesEstimees > 1 ? "s" : ""}</span>
-                        <span className="text-muted-foreground text-xs">({nbParPalette} u./pal.)</span>
+                  {paletteSplit !== null && (
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conditionnement</span>
+                        <span className="text-[11px] text-muted-foreground">{paletteSplit.capacite} u./pal.</span>
+                      </div>
+                      <div className="space-y-0.5 text-xs">
+                        {paletteSplit.completes > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">
+                              {paletteSplit.completes} palette{paletteSplit.completes > 1 ? "s" : ""} complète{paletteSplit.completes > 1 ? "s" : ""}
+                            </span>
+                            <span className="font-mono font-medium text-foreground tabular">{paletteSplit.completes * paletteSplit.capacite} u.</span>
+                          </div>
+                        )}
+                        {paletteSplit.reste > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">1 palette partielle</span>
+                            <span className="font-mono font-medium text-foreground tabular">{paletteSplit.reste} u.</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between border-t border-border/60 pt-1 mt-1">
+                          <span className="font-medium text-foreground">Total palettes</span>
+                          <span className="font-mono font-bold text-foreground tabular">{paletteSplit.total}</span>
+                        </div>
                       </div>
                     </div>
                   )}
