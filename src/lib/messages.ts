@@ -5,8 +5,9 @@ export const MSG = {
   // ── Fabrication / Production ────────────────────────────────────────────────
   OF_CREATED:               "Fabrication créée — stock réservé",
   OF_PLANNED_DEFICIT:       "Fabrication créée, mais il manque des pièces. Vérifiez la carte.",
-  OF_STARTED:               "Fabrication démarrée",
+  OF_STARTED:               "Fabrication lancée",
   OF_RESUMED:               "Pièces disponibles — fabrication lancée",
+  OF_LAUNCH_PENDING:        "Lancement enregistré — certaines pièces manquent encore",
   OF_CANCELED:              "Fabrication annulée — réservations libérées",
   OF_DELETED:               "Fabrication supprimée",
   OF_DONE:                  "Fabrication terminée — stock mis à jour",
