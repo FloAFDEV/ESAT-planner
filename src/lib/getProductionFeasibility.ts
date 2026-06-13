@@ -8,6 +8,7 @@ export type ProductionFeasibilityResult = {
   };
   components: Array<{
     composant_id: string;
+    reference: string;
     name: string;
     needed: number;
     available: number;
@@ -16,6 +17,7 @@ export type ProductionFeasibilityResult = {
   }>;
   missing: Array<{
     composant_id: string;
+    reference: string;
     name: string;
     needed: number;
     available: number;
@@ -59,8 +61,8 @@ export async function getProductionFeasibility(
 
   // Read stock + real-time reservations in parallel for conservative available calculation
   const [composantResult, reservationsResult] = await Promise.all([
-    sb.from("composants").select("id,name,stock,reserved_stock").in("id", composantIds),
-    sb.from("stock_reservations").select("composant_id,quantity").in("composant_id", composantIds),
+    sb.from("composants").select("id,reference,name,stock,reserved_stock").in("id", composantIds),
+    sb.from("stock_reservations").select("composant_id,quantity").eq("status", "active").in("composant_id", composantIds),
   ]);
   if (composantResult.error) throw composantResult.error;
   if (reservationsResult.error) throw reservationsResult.error;
@@ -71,7 +73,7 @@ export async function getProductionFeasibility(
     realtimeReserved.set(r.composant_id, (realtimeReserved.get(r.composant_id) ?? 0) + Number(r.quantity ?? 0));
   }
 
-  const byId = new Map<string, { name: string; available: number }>(
+  const byId = new Map<string, { reference: string; name: string; available: number }>(
     (composantResult.data ?? []).map((row: any) => {
       const cachedReserved = Number(row.reserved_stock ?? 0);
       const realtimeRes = realtimeReserved.get(row.id) ?? 0;
@@ -80,6 +82,7 @@ export async function getProductionFeasibility(
       return [
         row.id,
         {
+          reference: String(row.reference ?? ""),
           name: String(row.name ?? "Inconnu"),
           available: Math.max(0, Number(row.stock ?? 0) - reserved),
         },
@@ -89,10 +92,11 @@ export async function getProductionFeasibility(
 
   const components = composantIds.map((composantId) => {
     const needed = neededByComposant.get(composantId) ?? 0;
-    const { name = "Inconnu", available = 0 } = byId.get(composantId) ?? {};
+    const { reference = "", name = "Inconnu", available = 0 } = byId.get(composantId) ?? {};
     const missing = Math.max(0, needed - available);
     return {
       composant_id: composantId,
+      reference,
       name,
       needed,
       available,
