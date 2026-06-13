@@ -15,7 +15,7 @@ export const MSG = {
   OF_EXPORT_EMPTY:          "Aucun OF à exporter",
   OF_EXPORT_OK:             "Export CSV téléchargé",
   OF_PARTIAL:               (produced: number | string, total: number | string) =>
-                              `${produced} coffret${Number(produced) > 1 ? "s" : ""} fabriqué${Number(produced) > 1 ? "s" : ""} sur ${total} demandé${Number(total) > 1 ? "s" : ""}`,
+                              `${produced} coffret${Number(produced) > 1 ? "s" : ""} fabriqué${Number(produced) > 1 ? "s" : ""} sur ${total} — stock mis à jour`,
   OF_STILL_MISSING:         (list: string) => `Il manque encore des pièces :\n${list}`,
   OF_QTY_REQUIRED:          "Saisissez au moins une quantité",
 
