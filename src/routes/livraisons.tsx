@@ -112,7 +112,7 @@ function LivraisonsPage() {
       // Round 1: base shipments
       const { data: shipmentRows, error } = await sb
         .from("shipments")
-        .select("id,reference,client_id,total_weight,total_pallets,status,created_at")
+        .select("id,reference,bl_number,client_id,total_weight,total_pallets,status,created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
@@ -332,8 +332,14 @@ function LivraisonsPage() {
                     <Truck className="h-4 w-4 text-info" />
                     <ClientPopover client={s.client_entity} />
                   </CardTitle>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    <span className="font-mono">{s.reference ?? s.id}</span> · {fmtDate(s.created_at)}
+                  <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="font-mono">{s.reference ?? s.id}</span>
+                    {s.bl_number && (
+                      <span className="inline-flex items-center gap-1 font-mono bg-info/10 text-info border border-info/20 rounded px-1.5 py-0">
+                        BL {s.bl_number}
+                      </span>
+                    )}
+                    <span>{fmtDate(s.created_at)}</span>
                   </div>
                   <div className="mt-1">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${livraisonStatusMeta[status ?? ""]?.cls ?? "bg-muted text-muted-foreground"}`}>
@@ -888,6 +894,7 @@ function NewShipmentDialog() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [clientId, setClientId] = useState("");
+  const [blNumber, setBlNumber] = useState("");
   const [status, setStatus] = useState<LivraisonStatus>("draft");
   const [lines, setLines] = useState<ShipmentLineDraft[]>([{ product_variant_id: "", quantity: 1 }]);
   const [pallets, setPallets] = useState<PalletDraft[]>([]);
@@ -1064,7 +1071,7 @@ function NewShipmentDialog() {
   }
 
   function reset() {
-    setClientId(""); setStatus("draft");
+    setClientId(""); setBlNumber(""); setStatus("draft");
     setLines([{ product_variant_id: "", quantity: 1 }]);
     setPallets([]);
   }
@@ -1082,7 +1089,7 @@ function NewShipmentDialog() {
       // total_weight sera recalculé par trigger DB — on envoie 0 comme placeholder
       const { data: shipment, error: shipmentError } = await sb
         .from("shipments")
-        .insert({ client_id: clientId, status, total_weight: 0, total_pallets: 0 })
+        .insert({ client_id: clientId, status, total_weight: 0, total_pallets: 0, bl_number: blNumber.trim() || null })
         .select("id")
         .single();
       if (shipmentError) throw shipmentError;
@@ -1132,6 +1139,16 @@ function NewShipmentDialog() {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Nouveau shipment</DialogTitle></DialogHeader>
         <div className="space-y-5 py-2">
+
+          {/* Numéro BL */}
+          <div className="space-y-2">
+            <Label>Numéro BL <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+            <Input
+              placeholder="ex: BL-2026-001"
+              value={blNumber}
+              onChange={(e) => setBlNumber(e.target.value)}
+            />
+          </div>
 
           {/* Client + statut */}
           <div className="grid grid-cols-2 gap-3">

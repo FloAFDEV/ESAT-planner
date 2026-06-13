@@ -35,7 +35,7 @@ function LivraisonDetail() {
     queryFn: async () => {
       const { data: shipment, error } = await sb
         .from("shipments")
-        .select("id,reference,client_id,total_weight,total_pallets,status,created_at")
+        .select("id,reference,bl_number,client_id,total_weight,total_pallets,status,created_at")
         .eq("id", id)
         .single();
       if (error) throw error;
@@ -205,8 +205,14 @@ function LivraisonDetail() {
           <div>
             <img src={agecetLogo} alt="ESAT AGECET" className="h-10 w-auto rounded-sm border border-border mb-3" />
             <h1 className="text-xl font-semibold">{UI.livraisons} · Shipment</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Référence {data.reference ?? "Données manquantes"} · {fmtDate(data.created_at)}
+            <p className="text-sm text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2">
+              <span>Référence {data.reference ?? "Données manquantes"}</span>
+              {data.bl_number && (
+                <span className="inline-flex items-center gap-1 font-mono bg-info/10 text-info border border-info/20 rounded px-1.5 py-0 text-xs">
+                  BL {data.bl_number}
+                </span>
+              )}
+              <span>· {fmtDate(data.created_at)}</span>
             </p>
           </div>
           <div>
