@@ -18,6 +18,7 @@ import { fmtInt, splitPalettes } from "@/lib/format";
 import { normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
+import { MSG } from "@/lib/messages";
 
 type ProdRow = { id: string; coffret_id: string; quantity: number };
 
@@ -232,9 +233,9 @@ function ProductionPage() {
     onSuccess: (results) => {
       const hasDeficit = results.some((r) => !r.can_start_now);
       if (hasDeficit) {
-        toast.warning("OF planifié — stock insuffisant au moment de la création (voir liste)");
+        toast.warning(MSG.OF_PLANNED_DEFICIT);
       } else {
-        toast.success("Fabrication créée — stock réservé");
+        toast.success(MSG.OF_CREATED);
       }
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
@@ -284,12 +285,12 @@ function ProductionPage() {
     },
     onSuccess: (result) => {
       if (result.ok) {
-        toast.success("Stock complet — fabrication démarrée");
+        toast.success(MSG.OF_RESUMED);
         qc.invalidateQueries({ queryKey: ["production_orders"] });
         qc.invalidateQueries({ queryKey: ["composants"] });
       } else {
         const list = result.missing.map((m: any) => `${m.reference || m.name} → manque ${m.missing}`).join("\n");
-        toast.warning(`Stock encore insuffisant :\n${list}`, { duration: 8000 });
+        toast.warning(MSG.OF_STILL_MISSING(list), { duration: 8000 });
       }
       qc.invalidateQueries({ queryKey: ["deficit_checks"] });
     },
@@ -306,7 +307,7 @@ function ProductionPage() {
       if (data && data.success === false) throw new Error(data.error || "Annulation impossible");
     },
     onSuccess: () => {
-      toast.success("Fabrication annulée — réservations libérées");
+      toast.success(MSG.OF_CANCELED);
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
@@ -324,7 +325,7 @@ function ProductionPage() {
       if (data && data.success === false) throw new Error(data.error || "Suppression impossible");
     },
     onSuccess: () => {
-      toast.success("Fabrication supprimée");
+      toast.success(MSG.OF_DELETED);
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       setDeleteOfTarget(null);
       setDeleteOfInput("");
@@ -395,7 +396,7 @@ function ProductionPage() {
     },
     onSuccess: (data) => {
       const n = data.deleted_count;
-      toast.success(`${n} OF${n !== 1 ? "s" : ""} archivé${n !== 1 ? "s" : ""}`);
+      toast.success(MSG.OF_ARCHIVED(n));
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       setArchiveOpen(false);
       setArchiveInput("");
@@ -408,7 +409,7 @@ function ProductionPage() {
     setArchiveExporting(true);
     try {
       const orderIds = archivePreview.map((o: any) => o.id as string);
-      if (orderIds.length === 0) { toast.error("Aucun OF à exporter"); return; }
+      if (orderIds.length === 0) { toast.error(MSG.OF_EXPORT_EMPTY); return; }
       const dateStr = new Date().toISOString().slice(0, 10);
       const cutoff = archiveBefore;
       const periodLabel = archivePeriod === "tout" ? "Tout" : archivePeriod === "1an" ? "1 an" : archivePeriod === "6m" ? "6 mois" : "3 mois";
@@ -510,9 +511,9 @@ function ProductionPage() {
       a.download = `archives-of-${dateStr}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Export CSV téléchargé");
+      toast.success(MSG.OF_EXPORT_OK);
     } catch (e: any) {
-      toast.error((e as Error).message ?? "Erreur export CSV");
+      toast.error((e as Error).message ?? "Erreur lors de l'export CSV");
     } finally {
       setArchiveExporting(false);
     }
@@ -530,8 +531,8 @@ function ProductionPage() {
       return data as { status: string; validated_qty: number; produced_qty: number; total_qty: number };
     },
     onSuccess: (data) => {
-      if (data?.status === "done") toast.success("Fabrication terminée — stock mis à jour");
-      else toast.success(`Validation partielle : ${data?.produced_qty ?? "?"}/${data?.total_qty ?? "?"}`);
+      if (data?.status === "done") toast.success(MSG.OF_DONE);
+      else toast.success(MSG.OF_PARTIAL(data?.produced_qty ?? "?", data?.total_qty ?? "?"));
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_movements"] });
@@ -553,7 +554,7 @@ function ProductionPage() {
 
   async function runExport() {
     const activeQtys = Object.entries(exportQtys).filter(([, v]) => Number(v) > 0);
-    if (activeQtys.length === 0) { toast.error("Saisissez au moins une quantité"); return; }
+    if (activeQtys.length === 0) { toast.error(MSG.OF_QTY_REQUIRED); return; }
 
     const coffretIds = activeQtys.map(([id]) => id);
     const { data, error } = await (sb
@@ -998,7 +999,7 @@ function ProductionPage() {
                         type="button"
                         className="group flex items-center gap-1.5 font-mono text-base font-bold text-foreground hover:text-info transition-colors cursor-copy"
                         title="Copier la référence OF client"
-                        onClick={() => { navigator.clipboard.writeText(clientOfRef); toast.success(`OF client ${clientOfRef} copié`); }}
+                        onClick={() => { navigator.clipboard.writeText(clientOfRef); toast.success(MSG.OF_COPIED(clientOfRef)); }}
                       >
                         {clientOfRef}
                         <Copy className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
@@ -1380,7 +1381,17 @@ function ReservationsByOf() {
         .order("of_number", { ascending: true })
         .order("product_reference", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+      const rows = (data ?? []) as any[];
+      const poIds = [...new Set(rows.map((r) => r.production_order_id))];
+      if (poIds.length > 0) {
+        const { data: poData } = await sb
+          .from("production_orders")
+          .select("id,client_of_reference")
+          .in("id", poIds);
+        const poMap = new Map((poData ?? []).map((p: any) => [p.id, p.client_of_reference]));
+        return rows.map((r) => ({ ...r, client_of_reference: poMap.get(r.production_order_id) ?? null }));
+      }
+      return rows;
     },
   });
 
@@ -1388,7 +1399,7 @@ function ReservationsByOf() {
     let rows = data ?? [];
     if (filterStatus !== "all") rows = rows.filter((r) => r.status === filterStatus);
     const q = filterOf.trim().toLowerCase();
-    if (q) rows = rows.filter((r) => (r.of_number ?? "").toLowerCase().includes(q));
+    if (q) rows = rows.filter((r) => (r.of_number ?? "").toLowerCase().includes(q) || (r.client_of_reference ?? "").toLowerCase().includes(q));
     const qr = filterRef.trim().toLowerCase();
     if (qr) rows = rows.filter((r) => (r.product_reference ?? "").toLowerCase().includes(qr));
     return rows;
@@ -1396,10 +1407,10 @@ function ReservationsByOf() {
 
   // Regroupement par OF
   const grouped = useMemo(() => {
-    const map = new Map<string, { of_number: string; of_status: string; rows: any[] }>();
+    const map = new Map<string, { of_number: string; of_status: string; client_of_reference: string | null; rows: any[] }>();
     for (const row of filtered) {
       const key = row.production_order_id;
-      if (!map.has(key)) map.set(key, { of_number: row.of_number, of_status: row.of_status, rows: [] });
+      if (!map.has(key)) map.set(key, { of_number: row.of_number, of_status: row.of_status, client_of_reference: row.client_of_reference ?? null, rows: [] });
       map.get(key)!.rows.push(row);
     }
     return Array.from(map.values());
@@ -1455,6 +1466,9 @@ function ReservationsByOf() {
           <div key={group.of_number} className="border-t border-border">
             <div className="flex items-center gap-3 px-4 py-2 bg-muted/40">
               <span className="text-xs font-mono font-semibold text-foreground">{group.of_number}</span>
+              {group.client_of_reference && (
+                <span className="text-xs font-mono font-bold text-primary">{group.client_of_reference}</span>
+              )}
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${statusCls[group.of_status] ?? "bg-muted text-muted-foreground"}`}>
                 OF {group.rows[0]?.product_reference ?? "—"}
               </span>
