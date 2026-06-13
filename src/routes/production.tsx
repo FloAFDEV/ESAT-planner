@@ -662,8 +662,8 @@ function ProductionPage() {
                   autoFocus
                 />
                 <p className="text-xs text-muted-foreground">
-                  Saisir {fmtInt(validateRemaining)} pour terminer l&rsquo;OF complètement.
-                  Un chiffre inférieur crée une validation partielle.
+                  Saisir {fmtInt(validateRemaining)} pour terminer la fabrication complètement.
+                  Un nombre inférieur enregistre ce qui a été produit et met le stock à jour en conséquence.
                 </p>
               </div>
             </div>
@@ -927,8 +927,7 @@ function ProductionPage() {
             <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <span>
-                Certains composants manquent. L'OF sera planifié avec des réservations en déficit —
-                le démarrage sera bloqué tant que le stock n'est pas réapprovisionné.
+                Il manque des pièces pour certains coffrets. La fabrication sera créée mais ne pourra pas démarrer tant que le stock n'est pas réapprovisionné.
               </span>
             </div>
           )}
