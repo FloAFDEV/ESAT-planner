@@ -1263,7 +1263,7 @@ function NewShipmentDialog() {
                             <SelectItem value="custom">Personnalisée…</SelectItem>
                             {effectivePaletteTypes.map((pt: any) => (
                               <SelectItem key={pt.id} value={pt.id}>
-                                {pt.label} · {pt.length}×{pt.width}cm · tare {pt.tare_weight}kg
+                                {pt.label} ({pt.tare_weight} kg)
                               </SelectItem>
                             ))}
                           </SelectContent>
