@@ -2,6 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MSG } from "@/lib/messages";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,7 @@ function StockPage() {
       if (data && data.success === false) throw new Error(data.message || data.error || "Suppression impossible");
     },
     onSuccess: () => {
-      toast.success("Composant supprimé");
+      toast.success(MSG.COMPOSANT_DELETED);
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["nomenclatures"] });
       setDeleteTarget(null);
@@ -491,7 +492,7 @@ function MouvementDialog({
       });
     },
     onSuccess: () => {
-      toast.success("Mouvement enregistré");
+      toast.success(MSG.STOCK_MOVEMENT_SAVED);
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["composant_movements"] });
       onOpenChange(false);

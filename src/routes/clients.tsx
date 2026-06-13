@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MSG } from "@/lib/messages";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -154,7 +155,7 @@ function ClientsPage() {
       }
     },
     onSuccess: (id) => {
-      toast.success(editMode === "create" ? "Client créé" : "Client mis à jour");
+      toast.success(MSG.CLIENT_SAVED(editMode));
       qc.invalidateQueries({ queryKey: ["clients"] });
       setEditOpen(false);
       setSelectedId(id);
@@ -168,7 +169,7 @@ function ClientsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Client supprimé");
+      toast.success(MSG.CLIENT_DELETED);
       qc.invalidateQueries({ queryKey: ["clients"] });
       setSelectedId(null);
       setDeleteId(null);
@@ -185,7 +186,7 @@ function ClientsPage() {
       return d.getFullYear() === year && d.getMonth() + 1 === month;
     });
     if (rows.length === 0) {
-      toast.info("Aucune expédition pour cette période");
+      toast.info(MSG.SHIPMENT_EXPORT_EMPTY);
       return;
     }
     const clientMap = new Map((clients.data ?? []).map((c) => [c.id, c.name]));

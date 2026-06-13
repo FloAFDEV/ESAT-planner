@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
+import { MSG } from "@/lib/messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -136,7 +137,7 @@ function LivraisonDetail() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Statut shipment mis à jour");
+      toast.success(MSG.SHIPMENT_STATUS_UPDATED);
       qc.invalidateQueries({ queryKey: ["shipment", id] });
       qc.invalidateQueries({ queryKey: ["shipments"] });
     },
@@ -149,7 +150,7 @@ function LivraisonDetail() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Palette supprimée");
+      toast.success(MSG.PALLET_DELETED);
       qc.invalidateQueries({ queryKey: ["shipment", id] });
       qc.invalidateQueries({ queryKey: ["shipments"] });
     },

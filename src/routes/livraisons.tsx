@@ -15,6 +15,7 @@ import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers } f
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
+import { MSG } from "@/lib/messages";
 import agecetLogo from "@/assets/logo_agecet_hands.jpg";
 
 export const Route = createFileRoute("/livraisons")({
@@ -49,7 +50,7 @@ function LivraisonsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["shipments"] });
-      toast.success("Expédition supprimée");
+      toast.success(MSG.SHIPMENT_DELETED);
       setDeleteId(null);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -661,7 +662,7 @@ function CreateClientDialog() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Client créé");
+      toast.success(MSG.CLIENT_CREATED);
       setOpen(false);
       setName("");
       setAddress("");
@@ -717,6 +718,8 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
   const qc = useQueryClient();
 
   const [clientId, setClientId] = useState<string>(shipment.client_id ?? "");
+  const [clientOfRef, setClientOfRef] = useState<string>(shipment.client_of_reference ?? "");
+  const [blNumber, setBlNumber] = useState<string>(shipment.bl_number ?? "");
   const [lines, setLines] = useState<ShipmentLineDraft[]>(
     (shipment.lines ?? []).length > 0
       ? (shipment.lines as any[]).map((l: any) => ({ product_variant_id: l.product_variant_id, quantity: l.quantity }))
@@ -770,7 +773,7 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
       if (!clientId) throw new Error("Client requis");
       if (totals.items.length === 0) throw new Error("Ajoutez au moins une ligne");
 
-      await sb.from("shipments").update({ client_id: clientId, total_weight: totals.weight }).eq("id", shipment.id);
+      await sb.from("shipments").update({ client_id: clientId, total_weight: totals.weight, client_of_reference: clientOfRef || null, bl_number: blNumber || null }).eq("id", shipment.id);
       await sb.from("shipment_lines").delete().eq("shipment_id", shipment.id);
       const { error: lineError } = await sb.from("shipment_lines").insert(
         totals.items.map((it) => ({
@@ -783,7 +786,7 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
       if (lineError) throw lineError;
     },
     onSuccess: () => {
-      toast.success("Shipment mis à jour");
+      toast.success(MSG.SHIPMENT_UPDATED);
       qc.invalidateQueries({ queryKey: ["shipments"] });
       onClose();
     },
@@ -805,6 +808,17 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Référence OF client</Label>
+              <Input value={clientOfRef} onChange={(e) => setClientOfRef(e.target.value)} placeholder="Réf. client…" />
+            </div>
+            <div className="space-y-2">
+              <Label>Numéro BL</Label>
+              <Input value={blNumber} onChange={(e) => setBlNumber(e.target.value)} placeholder="BL-XXXXXX…" />
+            </div>
           </div>
 
           <div>
@@ -1129,7 +1143,7 @@ function NewShipmentDialog() {
       // Le trigger tg_sync_shipment_totals_pallets met à jour total_weight + total_pallets
     },
     onSuccess: () => {
-      toast.success("Shipment créé");
+      toast.success(MSG.SHIPMENT_CREATED);
       qc.invalidateQueries({ queryKey: ["shipments"] });
       setOpen(false);
       reset();
