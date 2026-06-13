@@ -179,6 +179,29 @@ function ProductionPage() {
     },
   });
 
+  // OF en déficit matière (can_start_now = false, encore démarrables)
+  const deficitOrders = useMemo(
+    () => (orders.data ?? []).filter((o: any) =>
+      o.can_start_now === false && (o.status === "draft" || o.status === "priority")
+    ),
+    [orders.data]
+  );
+
+  const deficitChecks = useQuery({
+    queryKey: ["deficit_checks", deficitOrders.map((o: any) => o.id)],
+    queryFn: async () => {
+      const results = await Promise.all(
+        deficitOrders.map(async (o: any) => ({
+          orderId: o.id,
+          feasibility: await getProductionFeasibility(o.coffret_id, o.quantity),
+        }))
+      );
+      return new Map(results.map((r) => [r.orderId, r.feasibility]));
+    },
+    enabled: deficitOrders.length > 0,
+    staleTime: 30_000,
+  });
+
   const createFabrication = useMutation({
     retry: 0,  // jamais de retry auto : la clé d'idempotence couvre les erreurs réseau
     mutationFn: async () => {
@@ -237,6 +260,38 @@ function ProductionPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const resumeOrder = useMutation({
+    retry: 0,
+    mutationFn: async ({ id, coffretId, quantity }: { id: string; coffretId: string; quantity: number }) => {
+      // Re-vérifie la faisabilité en temps réel
+      const feasibility = await getProductionFeasibility(coffretId, quantity);
+      if (!feasibility.can_produce) {
+        // Stock encore insuffisant — on retourne les manquants pour affichage
+        return { ok: false, missing: feasibility.missing };
+      }
+      // Stock OK — tente la transition
+      const { data, error } = await sb.rpc("transition_production_order_status", {
+        p_order_id: id,
+        p_status:   "in_progress",
+      });
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.error || "Transition impossible");
+      return { ok: true, missing: [] };
+    },
+    onSuccess: (result) => {
+      if (result.ok) {
+        toast.success("Stock complet — fabrication démarrée");
+        qc.invalidateQueries({ queryKey: ["production_orders"] });
+        qc.invalidateQueries({ queryKey: ["composants"] });
+      } else {
+        const list = result.missing.map((m: any) => `${m.reference || m.name} → manque ${m.missing}`).join("\n");
+        toast.warning(`Stock encore insuffisant :\n${list}`, { duration: 8000 });
+      }
+      qc.invalidateQueries({ queryKey: ["deficit_checks"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -925,6 +980,9 @@ function ProductionPage() {
             const poidsTotal = poidsUnitaire > 0 ? poidsUnitaire * o.quantity : null;
             const ofRef = o.reference ?? o.id.slice(0, 8);
             const clientOfRef = o.client_of_reference as string | null | undefined;
+            const isPendingMaterial = o.can_start_now === false && canStart;
+            const displayStatus = isPendingMaterial ? "pending_material" : status;
+            const missingParts = isPendingMaterial ? (deficitChecks.data?.get(o.id)?.missing ?? null) : null;
 
             return (
               <div
@@ -961,8 +1019,8 @@ function ProductionPage() {
                       </span>
                     </div>
                   </div>
-                  <span className={`inline-flex items-center shrink-0 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground border-border"}`}>
-                    {productionStatusMeta[status]?.label ?? status}
+                  <span className={`inline-flex items-center shrink-0 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${productionStatusMeta[displayStatus]?.cls ?? "bg-muted text-muted-foreground border-border"}`}>
+                    {productionStatusMeta[displayStatus]?.label ?? status}
                   </span>
                 </div>
 
@@ -1070,25 +1128,45 @@ function ProductionPage() {
                     </div>
                   )}
 
-                  {/* Déficit stock */}
-                  {o.can_start_now === false && canStart && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="inline-flex items-center gap-1.5 rounded-sm border border-warning/30 bg-warning/10 text-warning px-2 py-1 text-xs font-medium cursor-help w-full">
-                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                          Déficit stock — démarrage bloqué
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-[240px] text-xs">
-                        Stock insuffisant lors de la planification. Réapprovisionner avant de démarrer.
-                      </TooltipContent>
-                    </Tooltip>
+                  {/* En attente matière — pièces manquantes */}
+                  {isPendingMaterial && (
+                    <div className="rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-900/10 dark:border-orange-700 px-3 py-2 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 dark:text-orange-400">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Pièces manquantes
+                      </div>
+                      {missingParts === null ? (
+                        <div className="text-[11px] text-muted-foreground">Vérification en cours…</div>
+                      ) : missingParts.length === 0 ? (
+                        <div className="text-[11px] text-success font-medium">✓ Stock maintenant suffisant — cliquez Reprendre</div>
+                      ) : (
+                        <ul className="space-y-0.5 font-mono text-[11px]">
+                          {missingParts.map((m: any) => (
+                            <li key={m.composant_id} className="flex items-center justify-between gap-2">
+                              <span className="text-foreground font-medium">{m.reference || m.name}</span>
+                              <span className="text-orange-600 dark:text-orange-400 shrink-0">manque {m.missing}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
                 </div>
 
                 {/* Footer actions */}
                 <div className="px-4 pb-4 pt-2 border-t border-border/60 flex flex-wrap gap-1.5">
-                  {canStart && (
+                  {canStart && isPendingMaterial && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-700"
+                      onClick={() => resumeOrder.mutate({ id: o.id, coffretId: o.coffret_id, quantity: o.quantity })}
+                      disabled={resumeOrder.isPending}
+                    >
+                      Reprendre fabrication
+                    </Button>
+                  )}
+                  {canStart && !isPendingMaterial && (
                     <Button size="sm" variant="default" className="flex-1" onClick={() => transition.mutate({ id: o.id, status: "in_progress" })} disabled={transition.isPending}>
                       Démarrer
                     </Button>
