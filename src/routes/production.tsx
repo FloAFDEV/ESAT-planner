@@ -270,6 +270,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["deficit_checks"] });
+      qc.invalidateQueries({ queryKey: ["reservations_by_of"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -288,6 +289,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["production_orders"] });
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_snapshot"] });
+      qc.invalidateQueries({ queryKey: ["reservations_by_of"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
