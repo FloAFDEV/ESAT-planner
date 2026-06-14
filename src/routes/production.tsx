@@ -928,7 +928,8 @@ function ProductionPage() {
             const canStart  = status === "draft" || status === "priority";
             const canFinish = status === "in_progress" || status === "partial";
             const canCancel = status === "draft" || status === "priority"
-                           || status === "in_progress" || status === "partial";
+                           || status === "in_progress" || status === "partial"
+                           || status === "pending_material";
             const snapshot = o.coffret_snapshot as { reference?: string; name?: string } | null;
             const coffretName = o.coffret?.name ?? snapshot?.name ?? "Coffret archivé";
             const coffretRef  = o.coffret?.reference ?? snapshot?.reference ?? "—";
