@@ -360,7 +360,7 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
       const orderIds = rows.map((r: any) => r.production_order_id).filter(Boolean);
       const { data: orders } = await sb
         .from("production_orders")
-        .select("id, reference, status, coffret_snapshot, coffret_id")
+        .select("id, reference, status, coffret_snapshot, coffret_id, client_of_reference")
         .in("id", orderIds);
       const orderMap = new Map<string, any>((orders ?? []).map((o: any) => [o.id as string, o]));
 
@@ -409,11 +409,14 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
                   <span className="font-mono font-medium">{r.order?.reference ?? r.production_order_id?.slice(0, 8)}</span>
                   <span className="font-semibold tabular shrink-0">{fmtInt(r.quantity)} unités</span>
                 </div>
+                {r.order?.client_of_reference && (
+                  <div className="text-muted-foreground font-semibold">OF client : {r.order.client_of_reference}</div>
+                )}
                 <div className="flex items-center justify-between gap-2 text-muted-foreground">
                   {(r.coffretRef || r.coffretName) ? (
                     <span className="font-mono truncate">{[r.coffretRef, r.coffretName].filter(Boolean).join(" · ")}</span>
                   ) : (
-                    <span className="italic">Coffret archivé</span>
+                    <span className="italic">Coffret non trouvé</span>
                   )}
                   {r.order?.status ? (
                     <span className={`shrink-0 inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${productionStatusMeta[normalizeProductionStatus(r.order.status)]?.cls ?? "bg-muted text-muted-foreground border-border"}`}>
