@@ -55,6 +55,7 @@ export function normalizeProductionStatus(status?: string | null): ProductionSta
     value === "in_progress" || value === "partial" || value === "done" || value === "canceled"
   ) return value;
   // Legacy → canonical
+  if (value === "old_priority") return "priority";
   if (value === "annule") return "canceled";
   if (value === "termine") return "done";
   if (value === "en_cours" || value === "en_pause") return "in_progress";
