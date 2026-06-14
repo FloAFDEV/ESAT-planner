@@ -597,7 +597,7 @@ function ProductionPage() {
     a.click();
     URL.revokeObjectURL(url);
     setExportOpen(false);
-    toast.success("Export CSV téléchargé");
+    toast.success(MSG.OF_EXPORT_OK);
   }
 
   const validateRemaining = validateTarget
