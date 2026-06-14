@@ -360,13 +360,32 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
       const orderIds = rows.map((r: any) => r.production_order_id).filter(Boolean);
       const { data: orders } = await sb
         .from("production_orders")
-        .select("id, reference, status, coffret_snapshot")
+        .select("id, reference, status, coffret_snapshot, coffret_id")
         .in("id", orderIds);
       const orderMap = new Map<string, any>((orders ?? []).map((o: any) => [o.id as string, o]));
+
+      // Fallback: fetch coffrets for orders missing snapshot
+      const missingCoffretIds = (orders ?? [])
+        .filter((o: any) => !o.coffret_snapshot?.reference && o.coffret_id)
+        .map((o: any) => o.coffret_id as string);
+      const coffretMap = new Map<string, any>();
+      if (missingCoffretIds.length > 0) {
+        const { data: coffrets } = await sb
+          .from("coffrets")
+          .select("id, reference, name")
+          .in("id", missingCoffretIds);
+        (coffrets ?? []).forEach((c: any) => coffretMap.set(c.id, c));
+      }
+
       return rows.map((r: any) => {
         const order: any = orderMap.get(r.production_order_id) ?? null;
         const snap = (order?.coffret_snapshot ?? {}) as { reference?: string; name?: string };
-        return { ...r, order, coffretRef: snap.reference ?? null, coffretName: snap.name ?? null };
+        const fallback = coffretMap.get(order?.coffret_id) ?? null;
+        return {
+          ...r, order,
+          coffretRef: snap.reference ?? fallback?.reference ?? null,
+          coffretName: snap.name ?? fallback?.name ?? null,
+        };
       });
     },
   });
