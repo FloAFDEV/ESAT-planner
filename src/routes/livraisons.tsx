@@ -41,6 +41,7 @@ function LivraisonsPage() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editShipment, setEditShipment] = useState<any | null>(null);
+  const [palettesShipment, setPalettesShipment] = useState<any | null>(null);
   const urlSearch = Route.useSearch();
   const [shipSearch, setShipSearch] = useState(() => urlSearch.filterClient || "");
   const [shipStatus, setShipStatus] = useState<string>(() => urlSearch.filterStatus || "all");
@@ -348,11 +349,14 @@ function LivraisonsPage() {
                   <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
                   <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
                   <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
-                  <Button asChild size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
-                    <Link to="/livraisons/$id" params={{ id: s.id }} search={{} as any}>
-                      <Layers className="h-3.5 w-3.5" />
-                      Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
-                    </Link>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full sm:w-auto gap-1.5"
+                    onClick={() => setPalettesShipment(s)}
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                    Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
                   </Button>
                 </div>
                 <div className="overflow-x-auto">
@@ -416,6 +420,13 @@ function LivraisonsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {palettesShipment && (
+        <PalettesDetailDialog
+          shipment={palettesShipment}
+          onClose={() => setPalettesShipment(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1155,6 +1166,138 @@ function NewShipmentDialog() {
           <Button onClick={() => create.mutate()} disabled={create.isPending || !canSubmit}>
             Créer le shipment
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Dialog détail conditionnement palettes ───────────────────────────────────
+
+function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: () => void }) {
+  const linesById = new Map<string, any>((shipment.lines ?? []).map((l: any) => [l.id, l]));
+
+  const palettes = (shipment.pallets ?? []).map((p: any) => {
+    const tare = Number(p.weight ?? 0);
+    const contentWeight = (p.pallet_lines ?? []).reduce((sum: number, pl: any) => {
+      const line = linesById.get(pl.shipment_line_id);
+      const unitWeight = Number(line?.variant?.weight ?? 0);
+      return sum + pl.quantity * unitWeight;
+    }, 0);
+    return { ...p, tare, contentWeight, totalWeight: tare + contentWeight };
+  });
+
+  const totalTare = palettes.reduce((s: number, p: any) => s + p.tare, 0);
+  const totalContent = palettes.reduce((s: number, p: any) => s + p.contentWeight, 0);
+  const totalWeight = totalTare + totalContent;
+  const hasMissingWeight = palettes.some((p: any) =>
+    (p.pallet_lines ?? []).some((pl: any) => {
+      const line = linesById.get(pl.shipment_line_id);
+      return !line?.variant?.weight || Number(line.variant.weight) === 0;
+    })
+  );
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            Conditionnement — {shipment.reference ?? shipment.id?.slice(0, 8)}
+          </DialogTitle>
+        </DialogHeader>
+
+        {palettes.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            Aucune palette enregistrée pour cette expédition.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {palettes.map((p: any, i: number) => {
+              const dims = [p.depth, p.width].filter(Boolean);
+              return (
+                <div key={p.id} className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <span className="font-semibold text-sm">{p.label || `Palette ${i + 1}`}</span>
+                      {p.type && <span className="ml-2 text-xs text-muted-foreground">{p.type}</span>}
+                    </div>
+                    <span className="text-xs font-semibold tabular">{fmtKg(p.totalWeight)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {dims.length > 0 && (
+                      <div>
+                        <div className="text-muted-foreground">Dimensions</div>
+                        <div className="font-medium">{dims.join(" × ")} cm</div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-muted-foreground">Palette vide</div>
+                      <div className="font-medium tabular">{fmtKg(p.tare)}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Contenu</div>
+                      <div className="font-medium tabular">{fmtKg(p.contentWeight)}</div>
+                    </div>
+                  </div>
+
+                  {(p.pallet_lines ?? []).length > 0 && (
+                    <div className="border-t border-border/50 pt-2 space-y-0.5">
+                      {(p.pallet_lines as any[]).map((pl: any) => {
+                        const line = linesById.get(pl.shipment_line_id);
+                        const lineWeight = pl.quantity * Number(line?.variant?.weight ?? 0);
+                        return (
+                          <div key={pl.id} className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="truncate font-mono">{line?.variant?.reference ?? "—"}</span>
+                            <span className="shrink-0 ml-2">{fmtInt(pl.quantity)} u. · {fmtKg(lineWeight)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {palettes.length > 0 && (
+          <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1 text-sm mt-2">
+            <div className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2">Récapitulatif</div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Nombre de palettes</span>
+              <span className="font-medium tabular">{palettes.length}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Poids palettes vides</span>
+              <span className="font-medium tabular">{fmtKg(totalTare)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Poids marchandises</span>
+              <span className="font-medium tabular">{fmtKg(totalContent)}</span>
+            </div>
+            <div className="flex justify-between border-t border-border pt-1 mt-1">
+              <span className="font-semibold">Poids total expédition</span>
+              <span className="font-semibold tabular">{fmtKg(totalWeight)}</span>
+            </div>
+            {hasMissingWeight && (
+              <p className="text-[11px] text-warning mt-1">⚠ Certains produits n'ont pas de poids renseigné — totaux indicatifs.</p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="flex-row justify-between items-center gap-2 mt-2">
+          <Link
+            to="/livraisons/$id"
+            params={{ id: shipment.id }}
+            search={{} as any}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
+            onClick={onClose}
+          >
+            Gérer les palettes →
+          </Link>
+          <Button variant="outline" size="sm" onClick={onClose}>Fermer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
