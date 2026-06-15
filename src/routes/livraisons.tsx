@@ -26,6 +26,10 @@ export const Route = createFileRoute("/livraisons")({
       { name: "description", content: "Préparation, palettisation et suivi des expéditions." },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    filterClient: typeof search.filterClient === "string" ? search.filterClient : "",
+    filterStatus: typeof search.filterStatus === "string" ? search.filterStatus : "",
+  }),
   component: LivraisonsPage,
 });
 
@@ -37,8 +41,9 @@ function LivraisonsPage() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editShipment, setEditShipment] = useState<any | null>(null);
-  const [shipSearch, setShipSearch] = useState("");
-  const [shipStatus, setShipStatus] = useState<string>("all");
+  const urlSearch = Route.useSearch();
+  const [shipSearch, setShipSearch] = useState(() => urlSearch.filterClient || "");
+  const [shipStatus, setShipStatus] = useState<string>(() => urlSearch.filterStatus || "all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -66,37 +71,6 @@ function LivraisonsPage() {
       qc.invalidateQueries({ queryKey: ["shipments"] });
     },
     onError: (e: Error) => toast.error(e.message),
-  });
-
-  const commercialOrders = useQuery({
-    queryKey: ["orders", "history"],
-    queryFn: async () => {
-      const { data: ordersData, error } = await sb
-        .from("orders")
-        .select("id, created_at, status, client_id")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-
-      const orderIds = ((ordersData ?? []) as any[]).map((o) => o.id);
-      let linesByOrder = new Map<string, any[]>();
-      if (orderIds.length > 0) {
-        const { data: linesData, error: linesError } = await sb
-          .from("order_lines")
-          .select("id,order_id,quantity")
-          .in("order_id", orderIds);
-        if (linesError) throw linesError;
-        for (const line of (linesData ?? []) as any[]) {
-          const current = linesByOrder.get(line.order_id) ?? [];
-          current.push(line);
-          linesByOrder.set(line.order_id, current);
-        }
-      }
-
-      return ((ordersData ?? []) as any[]).map((o) => ({
-        ...o,
-        lines: linesByOrder.get(o.id) ?? [],
-      }));
-    },
   });
 
   const clientsList = useQuery({
@@ -236,11 +210,6 @@ function LivraisonsPage() {
         </div>
       </header>
 
-      <ClientHistoryPanel
-        shipments={(shipments.data ?? []) as any[]}
-        clients={(clientsList.data ?? []) as any[]}
-        commercialOrders={(commercialOrders.data ?? []) as any[]}
-      />
 
       {/* Filter bar */}
       <div className="mb-4 flex flex-col sm:flex-row flex-wrap items-start sm:items-end gap-2">
@@ -332,7 +301,7 @@ function LivraisonsPage() {
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Truck className="h-4 w-4 text-info" />
-                    <ClientPopover client={s.client_entity} />
+                    <ClientPopover client={s.client_entity} shipmentDate={s.created_at} shipmentStatus={s.status} />
                   </CardTitle>
                   <div className="mt-1 space-y-0.5">
                     {s.client_of_reference && (
@@ -380,7 +349,7 @@ function LivraisonsPage() {
                   <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
                   <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
                   <Button asChild size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5">
-                    <Link to="/livraisons/$id" params={{ id: s.id }}>
+                    <Link to="/livraisons/$id" params={{ id: s.id }} search={{} as any}>
                       <Layers className="h-3.5 w-3.5" />
                       Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
                     </Link>
@@ -451,150 +420,12 @@ function LivraisonsPage() {
   );
 }
 
-function ClientHistoryPanel({
-  shipments,
-  clients,
-  commercialOrders,
-}: {
-  shipments: any[];
-  clients: any[];
-  commercialOrders: any[];
+
+function ClientPopover({ client, shipmentDate, shipmentStatus }: {
+  client: any | null;
+  shipmentDate?: string;
+  shipmentStatus?: string;
 }) {
-  const rows = useMemo(() => {
-    const byClient = new Map<string, {
-      name: string;
-      deliveries: number;
-      totalWeight: number;
-      totalPallets: number;
-      totalUnits: number;
-      dates: Date[];
-    }>();
-
-    for (const c of clients) {
-      byClient.set(c.id, {
-        name: c.name,
-        deliveries: 0,
-        totalWeight: 0,
-        totalPallets: 0,
-        totalUnits: 0,
-        dates: [],
-      });
-    }
-
-    for (const s of shipments) {
-      const key = s.client_id ?? `unknown-${s.id}`;
-      const row: {
-        name: string;
-        deliveries: number;
-        totalWeight: number;
-        totalPallets: number;
-        totalUnits: number;
-        dates: Date[];
-      } = byClient.get(key) ?? {
-        name: s.client_entity?.name ?? "Données manquantes",
-        deliveries: 0,
-        totalWeight: 0,
-        totalPallets: 0,
-        totalUnits: 0,
-        dates: [],
-      };
-
-      row.deliveries += 1;
-      row.totalWeight += Number(s.total_weight ?? 0);
-      row.totalPallets += Number(s.pallet_count ?? s.total_pallets ?? 0);
-      row.dates.push(new Date(s.created_at));
-
-      for (const line of (s.lines ?? []) as any[]) {
-        row.totalUnits += Number(line.quantity ?? 0);
-      }
-
-      byClient.set(key, row);
-    }
-
-    const ordersByClient = new Map<string, number>();
-    for (const o of commercialOrders ?? []) {
-      const status = String(o.status ?? "").toLowerCase();
-      if (status === "canceled" || status === "cancelled") continue;
-      const key = o.client_id;
-      if (!key) continue;
-      const current = ordersByClient.get(key) ?? 0;
-      const units = ((o.lines ?? []) as any[]).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
-      ordersByClient.set(key, current + units);
-    }
-
-    return Array.from(byClient.entries())
-      .map(([id, r]) => {
-        const dates = [...r.dates].sort((a, b) => a.getTime() - b.getTime());
-        const first = dates[0];
-        const last = dates[dates.length - 1];
-        const avgFreqDays = dates.length <= 1
-          ? null
-          : Math.round((last.getTime() - first.getTime()) / (1000 * 60 * 60 * 24) / (dates.length - 1));
-
-        return {
-          id,
-          name: r.name,
-          deliveries: r.deliveries,
-          totalWeight: r.totalWeight,
-          totalPallets: r.totalPallets,
-          totalUnits: r.totalUnits,
-          avgFreqDays,
-          lastDate: last,
-          indirectProductionUnits: ordersByClient.get(id) ?? 0,
-        };
-      })
-      .filter((r) => r.deliveries > 0)
-      .sort((a, b) => b.deliveries - a.deliveries);
-  }, [clients, shipments, commercialOrders]);
-
-  return (
-    <Card className="mb-4">
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="text-base">Historique clients (shipments / volumes / poids / fréquence)</CardTitle>
-        <span className="text-xs text-muted-foreground">{rows.length} client(s) actif(s)</span>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs md:text-sm">
-            <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 text-[11px] uppercase tracking-wider text-muted-foreground backdrop-blur">
-              <tr>
-                <th className="text-left p-1.5 md:p-2.5">Client</th>
-                <th className="text-right p-1.5 md:p-2.5">Shipments</th>
-                <th className="text-right p-1.5 md:p-2.5">Volume (u.)</th>
-                <th className="text-right p-1.5 md:p-2.5">Poids total</th>
-                <th className="text-right p-1.5 md:p-2.5">Palettes</th>
-                <th className="text-right p-1.5 md:p-2.5">Fréquence (j)</th>
-                <th className="text-right p-1.5 md:p-2.5">Demande cmd (u.)</th>
-                <th className="text-right p-1.5 md:p-2.5">Dernier shipment</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-border">
-                  <td className="p-1.5 md:p-2.5 font-medium">{r.name}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtInt(r.deliveries)}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtInt(r.totalUnits)}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtKg(r.totalWeight)}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtPalette(r.totalPallets)}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular">{r.avgFreqDays == null ? "—" : fmtInt(r.avgFreqDays)}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular">{fmtInt(r.indirectProductionUnits)}</td>
-                  <td className="p-1.5 md:p-2.5 text-right tabular text-muted-foreground">{r.lastDate ? fmtDate(r.lastDate.toISOString()) : "—"}</td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td className="p-3 text-sm text-muted-foreground" colSpan={8}>Aucun historique client exploitable pour le moment.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ClientPopover({ client }: { client: any | null }) {
   if (!client) return <span className="text-muted-foreground">Client inconnu</span>;
 
   const address = [client.address, client.postal_code, client.city, client.country]
@@ -633,6 +464,12 @@ function ClientPopover({ client }: { client: any | null }) {
         )}
         {!client.phone && !client.email && !address && (
           <p className="text-xs text-muted-foreground italic">Aucune coordonnée renseignée.</p>
+        )}
+        {shipmentDate && (
+          <div className="pt-2 border-t border-border text-[11px] text-muted-foreground">
+            Ce shipment : {new Date(shipmentDate).toLocaleDateString("fr-FR")}
+            {shipmentStatus && <span className="ml-1 font-medium">· {shipmentStatus}</span>}
+          </div>
         )}
       </PopoverContent>
     </Popover>

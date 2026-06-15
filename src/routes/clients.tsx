@@ -318,7 +318,7 @@ function ClientsPage() {
                       <Pencil className="h-3.5 w-3.5 mr-1" /> Modifier
                     </Button>
                     <Button asChild size="sm" variant="outline">
-                      <Link to="/livraisons">
+                      <Link to="/livraisons" search={{ filterClient: selected.name } as any}>
                         <Truck className="h-3.5 w-3.5 mr-1" /> Expéditions
                       </Link>
                     </Button>
@@ -418,6 +418,8 @@ function ClientsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <ClientHistorySummary clientId={selectedId!} shipments={livraisons.data ?? []} />
             </>
           )}
         </div>
@@ -495,6 +497,53 @@ function ClientsPage() {
       </Dialog>
 
     </div>
+  );
+}
+
+// ── Statistiques CRM par client ──────────────────────────────────────────────
+
+function ClientHistorySummary({ clientId, shipments }: { clientId: string; shipments: any[] }) {
+  const clientShipments = shipments.filter((s) => s.client_id === clientId);
+  if (clientShipments.length === 0) return null;
+
+  const totalWeight = clientShipments.reduce((sum, s) => sum + Number(s.total_weight ?? 0), 0);
+  const totalPallets = clientShipments.reduce((sum, s) => sum + Number(s.total_pallets ?? 0), 0);
+  const dates = clientShipments.map((s) => new Date(s.created_at)).sort((a, b) => a.getTime() - b.getTime());
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const avgFreqDays = dates.length <= 1
+    ? null
+    : Math.round((last.getTime() - first.getTime()) / (1000 * 60 * 60 * 24) / (dates.length - 1));
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="text-base">Statistiques CRM</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div>
+            <div className="text-xs text-muted-foreground">Expéditions</div>
+            <div className="font-semibold tabular">{fmtInt(clientShipments.length)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Poids total</div>
+            <div className="font-semibold tabular">{fmtKg(totalWeight)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Palettes</div>
+            <div className="font-semibold tabular">{fmtInt(totalPallets)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Fréquence moy.</div>
+            <div className="font-semibold tabular">{avgFreqDays == null ? "—" : `${fmtInt(avgFreqDays)} j`}</div>
+          </div>
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          Première livraison : {fmtDate(first.toISOString())} · Dernière : {fmtDate(last.toISOString())}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
