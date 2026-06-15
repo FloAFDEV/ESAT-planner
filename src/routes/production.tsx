@@ -65,6 +65,9 @@ function ProductionPage() {
   const qc = useQueryClient();
 
   const [rows, setRows] = useState<ProdRow[]>([{ id: crypto.randomUUID(), coffret_id: "", quantity: 1 }]);
+  const [ofType, setOfType] = useState<"coffret" | "custom">("coffret");
+  const [customLabel, setCustomLabel] = useState<string>("");
+  const [customQty, setCustomQty] = useState<number>(1);
   const [urgent, setUrgent] = useState(false);
   const [clientOfRef, setClientOfRef] = useState<string>("");
   const [ofNotes, setOfNotes] = useState<string>("");
@@ -290,6 +293,40 @@ function ProductionPage() {
     staleTime: 30_000,
   });
 
+  const createCustom = useMutation({
+    retry: 0,
+    mutationFn: async () => {
+      const p = urgent ? 1 : 0;
+      const key = `custom:${customLabel}:${customQty}:${p}:${Date.now()}`;
+      const { data, error } = await sb.rpc("create_custom_production_order", {
+        p_label:           customLabel.trim(),
+        p_quantity:        customQty,
+        p_status:          urgent ? "priority" : "draft",
+        p_priority:        p,
+        p_notes:           ofNotes.trim() || null,
+        p_idempotency_key: key,
+      });
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.error || "Création impossible");
+      if (clientOfRef.trim() && data?.order_id) {
+        await sb.from("production_orders")
+          .update({ client_of_reference: clientOfRef.trim() })
+          .eq("id", data.order_id);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success(MSG.OF_CREATED);
+      qc.invalidateQueries({ queryKey: ["production_orders"] });
+      setCustomLabel("");
+      setCustomQty(1);
+      setUrgent(false);
+      setClientOfRef("");
+      setOfNotes("");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const createFabrication = useMutation({
     retry: 0,  // jamais de retry auto : la clé d'idempotence couvre les erreurs réseau
     mutationFn: async () => {
@@ -326,6 +363,7 @@ function ProductionPage() {
       setUrgent(false);
       setClientOfRef("");
       setOfNotes("");
+      setOfType("coffret");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -874,14 +912,55 @@ function ProductionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Créer fabrication</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Créer fabrication</CardTitle>
+            <div className="flex items-center rounded-md border border-border overflow-hidden text-xs">
+              <button
+                className={`px-3 py-1.5 transition-colors ${ofType === "coffret" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:bg-muted"}`}
+                onClick={() => setOfType("coffret")}
+              >
+                Coffret
+              </button>
+              <button
+                className={`px-3 py-1.5 transition-colors ${ofType === "custom" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:bg-muted"}`}
+                onClick={() => setOfType("custom")}
+              >
+                Fabrication libre
+              </button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {coffrets.data && coffrets.data.length === 0 && (
+          {ofType === "coffret" && coffrets.data && coffrets.data.length === 0 && (
             <p className="text-sm text-muted-foreground">Aucune donnée disponible</p>
           )}
 
-          {rows.map((row, idx) => {
+          {ofType === "custom" && (
+            <div className="rounded-md border border-border p-3 space-y-3">
+              <div className="grid md:grid-cols-12 gap-3 items-end">
+                <div className="md:col-span-8">
+                  <label className="text-xs text-muted-foreground">Nom du produit / travail</label>
+                  <Input
+                    placeholder="ex: Sachets de vis M4 × 50, Boîtes chocolat…"
+                    value={customLabel}
+                    onChange={(e) => setCustomLabel(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="md:col-span-4">
+                  <label className="text-xs text-muted-foreground">Quantité</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={String(customQty)}
+                    onChange={(e) => setCustomQty(Math.max(1, Number(e.target.value || 1)))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ofType === "coffret" && rows.map((row, idx) => {
             const check = checksByRow.get(row.id);
             const feasible = check?.ok === true;
             const hasMissing = !feasible && check && check.missing.length > 0;
@@ -1061,9 +1140,19 @@ function ProductionPage() {
             />
           </div>
 
-          <Button className="w-full" onClick={() => createFabrication.mutate()} disabled={!canCreate || createFabrication.isPending}>
-            Créer fabrication
-          </Button>
+          {ofType === "coffret" ? (
+            <Button className="w-full" onClick={() => createFabrication.mutate()} disabled={!canCreate || createFabrication.isPending}>
+              {createFabrication.isPending ? "Création…" : "Créer fabrication"}
+            </Button>
+          ) : (
+            <Button
+              className="w-full"
+              onClick={() => createCustom.mutate()}
+              disabled={!customLabel.trim() || customQty < 1 || createCustom.isPending}
+            >
+              {createCustom.isPending ? "Création…" : "Créer fabrication libre"}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -1194,9 +1283,10 @@ function ProductionPage() {
             const canCancel = status === "draft" || status === "priority"
                            || status === "in_progress" || status === "partial"
                            || status === "pending_material";
+            const isCustom = o.product_type === "custom";
             const snapshot = o.coffret_snapshot as { reference?: string; name?: string } | null;
-            const coffretName = o.coffret?.name ?? snapshot?.name ?? "Coffret archivé";
-            const coffretRef  = o.coffret?.reference ?? snapshot?.reference ?? "—";
+            const coffretName = isCustom ? (o.label ?? "Fabrication libre") : (o.coffret?.name ?? snapshot?.name ?? "Coffret archivé");
+            const coffretRef  = isCustom ? null : (o.coffret?.reference ?? snapshot?.reference ?? "—");
             const isUrgent = Number(o.priority ?? 0) === 1;
             const producedQty = Number(o.produced_qty ?? 0);
             const progress = o.quantity > 0 ? Math.min(100, Math.round((producedQty / o.quantity) * 100)) : 0;
@@ -1247,6 +1337,11 @@ function ProductionPage() {
                         {ofRef}
                         <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
                       </button>
+                      {isCustom && (
+                        <span className="inline-flex items-center rounded-sm border border-info/30 bg-info/10 text-info px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          LIBRE
+                        </span>
+                      )}
                       {isUrgent && (
                         <span className="inline-flex items-center rounded-sm border border-destructive/30 bg-destructive/15 text-destructive px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           URGENT
@@ -1264,10 +1359,10 @@ function ProductionPage() {
 
                 {/* Body */}
                 <div className="px-4 py-3 flex-1 space-y-3">
-                  {/* Coffret identity */}
+                  {/* Coffret / produit identity */}
                   <div>
                     <div className="font-semibold text-base leading-tight">{coffretName}</div>
-                    <div className="text-xs font-mono text-muted-foreground mt-0.5">{coffretRef}</div>
+                    {coffretRef && <div className="text-xs font-mono text-muted-foreground mt-0.5">{coffretRef}</div>}
                   </div>
 
                   {/* Commentaire atelier */}
@@ -1296,8 +1391,8 @@ function ProductionPage() {
                     )}
                   </div>
 
-                  {/* Logistique palettes — pour préparation BL */}
-                  {paletteSplit !== null && (
+                  {/* Logistique palettes — pour préparation BL (coffret uniquement) */}
+                  {!isCustom && paletteSplit !== null && (
                     <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Conditionnement</span>
@@ -1366,8 +1461,8 @@ function ProductionPage() {
                     </div>
                   )}
 
-                  {/* En attente matière — pièces manquantes */}
-                  {isPendingMaterial && (
+                  {/* En attente matière — pièces manquantes (coffret uniquement) */}
+                  {isPendingMaterial && !isCustom && (
                     <div className="rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-900/10 dark:border-orange-700 px-3 py-2 space-y-1.5">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-orange-700 dark:text-orange-400">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -1415,7 +1510,18 @@ function ProductionPage() {
                       Lancer fabrication
                     </Button>
                   )}
-                  {canFinish && (
+                  {canFinish && isCustom && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="flex-1"
+                      disabled={transition.isPending}
+                      onClick={() => transition.mutate({ id: o.id, status: "done" })}
+                    >
+                      Terminer
+                    </Button>
+                  )}
+                  {canFinish && !isCustom && (
                     <Button
                       size="sm"
                       variant="default"
