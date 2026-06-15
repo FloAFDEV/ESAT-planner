@@ -612,6 +612,30 @@ function ProductionPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  function exportOFActifs() {
+    const list = (orders.data ?? []) as any[];
+    if (list.length === 0) { toast.error("Aucun OF actif à exporter."); return; }
+    const now = new Date().toISOString().slice(0, 10);
+    const lines: string[] = [
+      `﻿Export OF actifs — ${now}`,
+      "",
+      "Référence OF;OF client;Coffret (réf);Coffret (nom);Qté planifiée;Qté produite;Statut;Priorité;Date création",
+    ];
+    for (const o of list) {
+      const snap = (o.coffret_snapshot ?? {}) as { reference?: string; name?: string };
+      const coffretRef  = o.coffret?.reference ?? snap.reference ?? "—";
+      const coffretName = o.coffret?.name      ?? snap.name      ?? "—";
+      const statusLabel = productionStatusMeta[String(o.status)]?.label ?? o.status;
+      const priorite = o.priority > 0 ? "Urgent" : "Normal";
+      lines.push(`${o.reference ?? o.id.slice(0, 8)};${o.client_of_reference ?? "—"};${coffretRef};${coffretName};${o.quantity};${o.produced_qty ?? 0};${statusLabel};${priorite};${(o.created_at ?? "").slice(0, 10)}`);
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `of-actifs-${now}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Export OF actifs téléchargé.");
+  }
+
   function openExportDialog() {
     setExportOpen(true);
   }
@@ -759,9 +783,14 @@ function ProductionPage() {
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Production</p>
           <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Fabrication</h1>
         </div>
-        <Button variant="outline" onClick={openExportDialog} className="flex items-center gap-2 mt-2">
-          <FileDown className="h-4 w-4" /> Export pièces manquantes
-        </Button>
+        <div className="flex gap-2 mt-2">
+          <Button variant="outline" onClick={exportOFActifs} className="flex items-center gap-2">
+            <FileDown className="h-4 w-4" /> Export OF actifs
+          </Button>
+          <Button variant="outline" onClick={openExportDialog} className="flex items-center gap-2">
+            <FileDown className="h-4 w-4" /> Export pièces manquantes
+          </Button>
+        </div>
       </header>
 
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>

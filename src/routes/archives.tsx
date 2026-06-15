@@ -108,15 +108,16 @@ function ArchivesPage() {
 
       const fabricLines: string[] = [
         "=== 1. FABRICATIONS ===",
-        "Référence OF;OF client;Coffret (réf);Coffret (nom);Qté planifiée;Qté produite;Statut;Date création",
+        "Référence OF;OF client;Coffret (réf);Coffret (nom);Qté planifiée;Qté produite;Statut;Date création;Date fin",
       ];
       for (const o of filtered as any[]) {
         const snap = (o.coffret_snapshot ?? {}) as { reference?: string; name?: string };
         const coffretRef  = o.coffret?.reference ?? snap.reference ?? "—";
         const coffretName = o.coffret?.name      ?? snap.name      ?? "Coffret archivé";
         const statusLabel = productionStatusMeta[String(o.status)]?.label ?? o.status;
+        const dateFin = o.done_at ? (o.done_at as string).slice(0, 10) : "—";
         fabricLines.push(
-          `${o.reference ?? o.id.slice(0, 8)};${o.client_of_reference ?? "—"};${coffretRef};${coffretName};${o.quantity};${o.produced_qty ?? 0};${statusLabel};${(o.created_at ?? "").slice(0, 10)}`
+          `${o.reference ?? o.id.slice(0, 8)};${o.client_of_reference ?? "—"};${coffretRef};${coffretName};${o.quantity};${o.produced_qty ?? 0};${statusLabel};${(o.created_at ?? "").slice(0, 10)};${dateFin}`
         );
       }
 
@@ -260,7 +261,8 @@ function ArchivesPage() {
                     <th className="text-right px-4 py-2.5">Planifié</th>
                     <th className="text-right px-4 py-2.5">Produit</th>
                     <th className="text-left px-4 py-2.5">Statut</th>
-                    <th className="text-left px-4 py-2.5">Date</th>
+                    <th className="text-left px-4 py-2.5">Créé le</th>
+                    <th className="text-left px-4 py-2.5">Terminé le</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -316,9 +318,16 @@ function ArchivesPage() {
                             {meta?.label ?? o.status}
                           </span>
                         </td>
-                        {/* Date */}
+                        {/* Créé le */}
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(o.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
+                        </td>
+                        {/* Terminé le */}
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {o.done_at
+                            ? new Date(o.done_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+                            : <span className="text-muted-foreground/40">—</span>
+                          }
                         </td>
                       </tr>
                     );
