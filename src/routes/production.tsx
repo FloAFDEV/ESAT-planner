@@ -613,11 +613,12 @@ function ProductionPage() {
   });
 
   function exportOFActifs() {
-    const list = (orders.data ?? []) as any[];
-    if (list.length === 0) { toast.error("Aucun OF actif à exporter."); return; }
+    const list = filteredOrders as any[];
+    if (list.length === 0) { toast.error("Aucun OF à exporter."); return; }
     const now = new Date().toISOString().slice(0, 10);
+    const filterNote = filterStatus !== "all" ? ` — statut : ${filterStatus}` : "";
     const lines: string[] = [
-      `﻿Export OF actifs — ${now}`,
+      `﻿Export OF actifs — ${now}${filterNote}`,
       "",
       "Référence OF;OF client;Coffret (réf);Coffret (nom);Qté planifiée;Qté produite;Statut;Priorité;Date création",
     ];
