@@ -2,7 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Archive, AlertTriangle, ChevronsUpDown, Copy, FileDown, Trash2 } from "lucide-react";
+import { Archive, AlertTriangle, ChevronsUpDown, Copy, FileDown, Search, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,14 @@ function ProductionPage() {
   const [archiveCode, setArchiveCode] = useState<string>("");
   const [archiveInput, setArchiveInput] = useState<string>("");
   const [archiveExporting, setArchiveExporting] = useState(false);
+
+  // ── Filtres suivi fabrication ────────────────────────────────────────────
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterClientRef, setFilterClientRef] = useState<string>("all");
+  const [filterDatePreset, setFilterDatePreset] = useState<string>("all");
+  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
+  const [filterDateTo, setFilterDateTo] = useState<string>("");
 
   const coffrets = useQuery({
     queryKey: ["coffrets", "production"],
@@ -185,6 +193,81 @@ function ProductionPage() {
     () => (orders.data ?? []).filter((o: any) => o.status === "pending_material"),
     [orders.data]
   );
+
+  // Valeurs uniques de client_of_reference pour le filtre déroulant
+  const clientRefOptions = useMemo(() => {
+    const vals = new Set<string>();
+    for (const o of (orders.data ?? []) as any[]) {
+      if (o.client_of_reference) vals.add(o.client_of_reference);
+    }
+    return Array.from(vals).sort();
+  }, [orders.data]);
+
+  // OFs filtrés
+  const filteredOrders = useMemo(() => {
+    let list = (orders.data ?? []) as any[];
+
+    // Recherche libre
+    const q = filterSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((o) => {
+        const snap = o.coffret_snapshot as { reference?: string; name?: string } | null;
+        const coffretRef  = o.coffret?.reference ?? snap?.reference ?? "";
+        const coffretName = o.coffret?.name ?? snap?.name ?? "";
+        return (
+          (o.client_of_reference ?? "").toLowerCase().includes(q) ||
+          coffretRef.toLowerCase().includes(q) ||
+          coffretName.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // Filtre statut
+    if (filterStatus !== "all") {
+      list = list.filter((o) => o.status === filterStatus);
+    }
+
+    // Filtre référence client
+    if (filterClientRef !== "all") {
+      list = list.filter((o) => o.client_of_reference === filterClientRef);
+    }
+
+    // Filtre date
+    const now = new Date();
+    if (filterDatePreset !== "all" || filterDateFrom || filterDateTo) {
+      let from: Date | null = null;
+      let to: Date | null = null;
+      if (filterDatePreset === "today") {
+        from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        to   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      } else if (filterDatePreset === "week") {
+        const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
+        from = new Date(now); from.setDate(now.getDate() - day); from.setHours(0,0,0,0);
+        to   = new Date(from); to.setDate(from.getDate() + 6); to.setHours(23,59,59,999);
+      } else if (filterDatePreset === "month") {
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+        to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      } else {
+        if (filterDateFrom) from = new Date(filterDateFrom);
+        if (filterDateTo)   { to = new Date(filterDateTo); to.setHours(23,59,59,999); }
+      }
+      if (from) list = list.filter((o) => new Date(o.created_at) >= from!);
+      if (to)   list = list.filter((o) => new Date(o.created_at) <= to!);
+    }
+
+    return list;
+  }, [orders.data, filterSearch, filterStatus, filterClientRef, filterDatePreset, filterDateFrom, filterDateTo]);
+
+  const hasActiveFilters = filterSearch || filterStatus !== "all" || filterClientRef !== "all" || filterDatePreset !== "all" || filterDateFrom || filterDateTo;
+
+  function resetFilters() {
+    setFilterSearch("");
+    setFilterStatus("all");
+    setFilterClientRef("all");
+    setFilterDatePreset("all");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+  }
 
   const deficitChecks = useQuery({
     queryKey: ["deficit_checks", pendingMaterialOrders.map((o: any) => o.id)],
@@ -917,6 +1000,97 @@ function ProductionPage() {
           </Button>
         </div>
 
+        {/* ── Barre de filtres ── */}
+        <div className="mb-3 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Recherche libre */}
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                placeholder="OF client, référence, produit…"
+                className="pl-8 h-8 text-xs"
+              />
+              {filterSearch && (
+                <button onClick={() => setFilterSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Statut */}
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-8 text-xs w-[160px]">
+                <SelectValue placeholder="Statut" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les statuts</SelectItem>
+                <SelectItem value="draft">À produire</SelectItem>
+                <SelectItem value="priority">Urgent</SelectItem>
+                <SelectItem value="in_progress">En cours</SelectItem>
+                <SelectItem value="pending_material">Pièces manquantes</SelectItem>
+                <SelectItem value="partial">Partiel</SelectItem>
+                <SelectItem value="done">Terminé</SelectItem>
+                <SelectItem value="canceled">Annulé</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Référence client (OF client unique) */}
+            {clientRefOptions.length > 0 && (
+              <Select value={filterClientRef} onValueChange={setFilterClientRef}>
+                <SelectTrigger className="h-8 text-xs w-[180px]">
+                  <SelectValue placeholder="Réf. client" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes les réf. client</SelectItem>
+                  {clientRefOptions.map((ref) => (
+                    <SelectItem key={ref} value={ref}>{ref}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Date préréglages */}
+            <Select value={filterDatePreset} onValueChange={(v) => { setFilterDatePreset(v); if (v !== "custom") { setFilterDateFrom(""); setFilterDateTo(""); } }}>
+              <SelectTrigger className="h-8 text-xs w-[150px]">
+                <SelectValue placeholder="Date" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes dates</SelectItem>
+                <SelectItem value="today">Aujourd'hui</SelectItem>
+                <SelectItem value="week">Cette semaine</SelectItem>
+                <SelectItem value="month">Ce mois</SelectItem>
+                <SelectItem value="custom">Plage personnalisée</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Reset */}
+            {hasActiveFilters && (
+              <Button size="sm" variant="ghost" onClick={resetFilters} className="h-8 text-xs text-muted-foreground">
+                <X className="h-3 w-3 mr-1" /> Réinitialiser
+              </Button>
+            )}
+          </div>
+
+          {/* Plage personnalisée */}
+          {filterDatePreset === "custom" && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="h-8 text-xs w-[150px]" />
+              <span className="text-xs text-muted-foreground">→</span>
+              <Input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className="h-8 text-xs w-[150px]" />
+            </div>
+          )}
+
+          {/* Résumé */}
+          {hasActiveFilters && (
+            <p className="text-xs text-muted-foreground">
+              {filteredOrders.length} OF{filteredOrders.length !== 1 ? "s" : ""} affiché{filteredOrders.length !== 1 ? "s" : ""}
+              {(orders.data ?? []).length !== filteredOrders.length && ` sur ${(orders.data ?? []).length}`}
+            </p>
+          )}
+        </div>
+
         {(orders.data ?? []).length === 0 && (
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground space-y-2">
@@ -926,8 +1100,17 @@ function ProductionPage() {
           </Card>
         )}
 
+        {filteredOrders.length === 0 && (orders.data ?? []).length > 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground space-y-2">
+              <p>Aucun OF ne correspond aux filtres sélectionnés.</p>
+              <Button size="sm" variant="outline" onClick={resetFilters}>Réinitialiser les filtres</Button>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {(orders.data ?? []).map((o: any) => {
+          {filteredOrders.map((o: any) => {
             const status = String(o.status);
             const canStart  = status === "draft" || status === "priority";
             const canFinish = status === "in_progress" || status === "partial";
