@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers } from "lucide-react";
+import { FileDown, Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers } from "lucide-react";
 import { CreateClientDialog } from "@/components/CreateClientDialog";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
@@ -196,6 +196,30 @@ function LivraisonsPage() {
 
   const activeFilters = (shipStatus !== "all" ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (shipSearch.trim() ? 1 : 0);
 
+  function exportExpeditions() {
+    if (filteredShipments.length === 0) { toast.error("Aucune expédition à exporter."); return; }
+    const now = new Date().toISOString().slice(0, 10);
+    const { livraisonStatusMeta: meta } = { livraisonStatusMeta };
+    const lines: string[] = [
+      `﻿Export expéditions — ${now}`,
+      dateFrom || dateTo ? `Période : ${dateFrom || "…"} → ${dateTo || "…"}` : "Toutes dates",
+      "",
+      "Référence;BL;OF client;Client;Statut;Date;Poids (kg);Palettes",
+    ];
+    for (const s of filteredShipments as any[]) {
+      const clientName = s.client_entity?.name ?? "—";
+      const statusLabel = (livraisonStatusMeta as any)[String(s.status)]?.label ?? s.status;
+      const poids = Number(s.total_weight ?? 0).toFixed(2).replace(".", ",");
+      lines.push(`${s.reference ?? s.id?.slice(0, 8) ?? "—"};${s.bl_number ?? "—"};${s.client_of_reference ?? "—"};${clientName};${statusLabel};${(s.created_at ?? "").slice(0, 10)};${poids};${s.total_pallets ?? 0}`);
+    }
+    lines.push("", `Total : ${filteredShipments.length} expédition(s)`);
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `expeditions-${now}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Export expéditions téléchargé.");
+  }
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <header className="mb-6 flex items-end justify-between flex-wrap gap-3">
@@ -206,6 +230,9 @@ function LivraisonsPage() {
           <p className="text-xs text-muted-foreground mt-1">Préparation, palettisation, expédition et livraison finale.</p>
         </div>
         <div className="flex items-end gap-2 flex-wrap">
+          <Button variant="outline" onClick={exportExpeditions} className="flex items-center gap-2">
+            <FileDown className="h-4 w-4" /> Export
+          </Button>
           <CreateClientDialog />
           <NewShipmentDialog />
         </div>
