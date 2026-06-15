@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown, Package, Plus, Save, Scale, Trash2 } from "lucide-react";
 import { fmtInt } from "@/lib/format";
-import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
+import { useFeasibility } from "@/hooks/useFeasibility";
 
 export const Route = createFileRoute("/coffrets")({
   head: () => ({
@@ -258,11 +258,7 @@ function CoffretsPage() {
   });
 
   const feasibilityQuantity = Math.max(0, Number(feasibilityQty || 0));
-  const feasibility = useQuery({
-    queryKey: ["production_feasibility", selectedId, feasibilityQuantity],
-    enabled: Boolean(selectedId) && feasibilityQuantity > 0,
-    queryFn: async () => getProductionFeasibility(selectedId, feasibilityQuantity),
-  });
+  const feasibility = useFeasibility(selectedId, feasibilityQuantity);
 
   const totalCoffrets = (coffrets.data ?? []).length;
 
@@ -281,7 +277,7 @@ function CoffretsPage() {
           <Button size="sm" onClick={() => setNewCoffretOpen(true)}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Nouveau coffret
           </Button>
-          <Link to="/production" className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors">
+          <Link to="/production" search={{ filterStatus: "all" } as any} className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors">
             Produire →
           </Link>
         </div>
@@ -636,7 +632,13 @@ function BomComponentRow({ row, onSave, onDelete }: { row: any; onSave: (q: numb
   return (
     <tr className="hover:bg-muted/20 transition-colors group">
       <td className="px-3 py-2">
-        <span className="font-mono text-xs text-muted-foreground">{row.composant?.reference ?? "—"}</span>
+        {row.composant?.reference ? (
+          <Link to="/stock" search={{ filterSearch: row.composant.reference } as any} className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors">
+            {row.composant.reference}
+          </Link>
+        ) : (
+          <span className="font-mono text-xs text-muted-foreground">—</span>
+        )}
       </td>
       <td className="px-3 py-2">
         <span className="text-sm">{row.composant?.name ?? "—"}</span>

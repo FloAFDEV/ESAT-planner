@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers } from "lucide-react";
+import { CreateClientDialog } from "@/components/CreateClientDialog";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
@@ -638,80 +639,6 @@ function ClientPopover({ client }: { client: any | null }) {
   );
 }
 
-function CreateClientDialog() {
-  const sb = supabase as any;
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("France");
-
-  const create = useMutation({
-    mutationFn: async () => {
-      if (!name.trim()) throw new Error("Nom client requis");
-      const { error } = await sb.from("clients").insert({
-        name: name.trim(),
-        address: address.trim() || null,
-        postal_code: postalCode.trim() || null,
-        city: city.trim() || null,
-        country: country.trim() || null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      toast.success(MSG.CLIENT_CREATED);
-      setOpen(false);
-      setName("");
-      setAddress("");
-      setPostalCode("");
-      setCity("");
-      setCountry("France");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">Nouveau client</Button>
-      </DialogTrigger>
-      <DialogContent aria-describedby={undefined}>
-        <DialogHeader><DialogTitle>Créer un client</DialogTitle></DialogHeader>
-        <div className="space-y-3 py-1">
-          <div className="space-y-1">
-            <Label>Nom</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label>Adresse</Label>
-            <Textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1">
-              <Label>Code postal</Label>
-              <Input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Ville</Label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Pays</Label>
-              <Input value={country} onChange={(e) => setCountry(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-          <Button onClick={() => create.mutate()} disabled={create.isPending}>Créer</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () => void }) {
   const sb = supabase as any;

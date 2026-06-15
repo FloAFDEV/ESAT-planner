@@ -42,7 +42,7 @@ function clearIdempotencyKey(coffret_id: string, quantity: number, priority: num
 type LineCheck = {
   rowId: string;
   ok: boolean;
-  missing: Array<{ reference: string; name: string; manquant: number }>;
+  missing: Array<{ reference: string; name: string; needed: number; available: number; manquant: number }>;
   remaining: Array<{ reference: string; name: string; apres_production: number }>;
 };
 
@@ -52,6 +52,9 @@ export const Route = createFileRoute("/production")({
       { title: "Production — Atelier" },
       { name: "description", content: "Fabrication de coffrets et suivi d'avancement." },
     ],
+  }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    filterStatus: typeof search.filterStatus === "string" ? search.filterStatus : "all",
   }),
   component: ProductionPage,
 });
@@ -66,7 +69,6 @@ function ProductionPage() {
   const [clientOfRef, setClientOfRef] = useState<string>("");
   const [ofNotes, setOfNotes] = useState<string>("");
   const [exportOpen, setExportOpen] = useState(false);
-  const [exportQtys, setExportQtys] = useState<Record<string, string>>({});
   const [comboOpen, setComboOpen] = useState<Record<string, boolean>>({});
   const [comboSearch, setComboSearch] = useState<Record<string, string>>({});
   const [validateTarget, setValidateTarget] = useState<{
@@ -86,8 +88,9 @@ function ProductionPage() {
   const [archiveExporting, setArchiveExporting] = useState(false);
 
   // ── Filtres suivi fabrication ────────────────────────────────────────────
+  const urlSearch = Route.useSearch();
   const [filterSearch, setFilterSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>(() => urlSearch.filterStatus ?? "all");
   const [filterClientRef, setFilterClientRef] = useState<string>("all");
   const [filterDatePreset, setFilterDatePreset] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
@@ -119,9 +122,11 @@ function ProductionPage() {
         }
 
         const feasibility = await getProductionFeasibility(row.coffret_id, row.quantity);
-        const missing: Array<{ reference: string; name: string; manquant: number }> = feasibility.missing.map((item) => ({
+        const missing: Array<{ reference: string; name: string; needed: number; available: number; manquant: number }> = feasibility.missing.map((item) => ({
           reference: item.reference || item.composant_id,
           name: item.name,
+          needed: item.needed,
+          available: item.available,
           manquant: item.missing,
         }));
         const remaining: Array<{ reference: string; name: string; apres_production: number }> = feasibility.components.map((item) => ({
@@ -608,48 +613,17 @@ function ProductionPage() {
   });
 
   function openExportDialog() {
-    // Pre-fill with current planner rows (coffret_id → quantity)
-    const prefill: Record<string, string> = {};
-    for (const r of rows) {
-      if (r.coffret_id && r.quantity > 0) prefill[r.coffret_id] = String(r.quantity);
-    }
-    setExportQtys(prefill);
     setExportOpen(true);
   }
 
-  async function runExport() {
-    const activeQtys = Object.entries(exportQtys).filter(([, v]) => Number(v) > 0);
-    if (activeQtys.length === 0) { toast.error(MSG.OF_QTY_REQUIRED); return; }
+  function runExport() {
+    // Source unique : données déjà calculées lors du split de faisabilité (lineChecks)
+    const coffretById = new Map((coffrets.data ?? []).map((c: any) => [c.id, c as { reference: string; name: string }]));
+    const rowsWithMissing = validRows
+      .map((r) => ({ row: r, check: checksByRow.get(r.id) }))
+      .filter(({ check }) => check && !check.ok && check.missing.length > 0);
 
-    const coffretIds = activeQtys.map(([id]) => id);
-    const { data, error } = await (sb
-      .from("nomenclatures")
-      .select("quantity, coffret_id, coffret:coffrets(id,reference,name), composant:composants(reference,name,stock,reserved_stock)")
-      .eq("is_active", true)
-      .in("coffret_id", coffretIds) as any);
-    if (error) { toast.error(error.message); return; }
-
-    type NomRow = { quantity: number; coffret_id: string; coffret: any; composant: any };
-    const qtyMap = Object.fromEntries(activeQtys.map(([id, v]) => [id, Number(v)]));
-
-    const byCoffret = new Map<string, { coffretRef: string; coffretName: string; prodQty: number; lines: { ref: string; name: string; requis: number; dispo: number; manquant: number; statut: string }[] }>();
-    for (const r of (data ?? []) as NomRow[]) {
-      const prodQty = qtyMap[r.coffret_id] ?? 0;
-      const requis = Number(r.quantity) * prodQty;
-      const dispo = Math.max(0, Number(r.composant?.stock ?? 0) - Number(r.composant?.reserved_stock ?? 0));
-      const manquant = Math.max(0, requis - dispo);
-      if (manquant <= 0) continue;
-      const key = r.coffret?.reference ?? r.coffret_id;
-      if (!byCoffret.has(key)) byCoffret.set(key, { coffretRef: key, coffretName: r.coffret?.name ?? key, prodQty, lines: [] });
-      byCoffret.get(key)!.lines.push({
-        ref: r.composant?.reference ?? "?",
-        name: r.composant?.name ?? "?",
-        requis,
-        dispo,
-        manquant,
-        statut: dispo === 0 ? "BLOQUÉ" : "PARTIEL",
-      });
-    }
+    if (rowsWithMissing.length === 0) { toast.error(MSG.OF_QTY_REQUIRED); return; }
 
     const now = new Date().toISOString().slice(0, 10);
     const csvLines: string[] = [
@@ -661,13 +635,17 @@ function ProductionPage() {
     let totalManquant = 0;
     const totauxParComposant = new Map<string, { ref: string; name: string; total: number }>();
 
-    for (const [, c] of Array.from(byCoffret.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-      for (const l of c.lines) {
-        csvLines.push(`${c.coffretRef};${c.coffretName};${c.prodQty};${l.ref};${l.name};${l.requis};${l.dispo};${l.manquant};${l.statut}`);
+    for (const { row, check } of rowsWithMissing) {
+      const coffret = coffretById.get(row.coffret_id) as any;
+      const coffretRef  = coffret?.reference ?? row.coffret_id;
+      const coffretName = coffret?.name      ?? row.coffret_id;
+      for (const l of check!.missing) {
+        const statut = l.available === 0 ? "BLOQUÉ" : "PARTIEL";
+        csvLines.push(`${coffretRef};${coffretName};${row.quantity};${l.reference};${l.name};${l.needed};${l.available};${l.manquant};${statut}`);
         totalManquant += l.manquant;
-        const ex = totauxParComposant.get(l.ref);
+        const ex = totauxParComposant.get(l.reference);
         if (ex) ex.total += l.manquant;
-        else totauxParComposant.set(l.ref, { ref: l.ref, name: l.name, total: l.manquant });
+        else totauxParComposant.set(l.reference, { ref: l.reference, name: l.name, total: l.manquant });
       }
     }
 
@@ -768,28 +746,55 @@ function ProductionPage() {
           <DialogHeader>
             <DialogTitle>Export pièces manquantes</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">Indiquez le tirage souhaité par coffret. Seuls les coffrets avec une quantité &gt; 0 seront inclus.</p>
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {(coffrets.data ?? []).map((c: any) => (
-              <div key={c.id} className="flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{c.name}</div>
-                  <div className="text-xs font-mono text-muted-foreground">{c.reference}</div>
-                </div>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="Qté"
-                  className="w-28 text-right"
-                  value={exportQtys[c.id] ?? ""}
-                  onChange={(e) => setExportQtys((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                />
+          <p className="text-xs text-muted-foreground">
+            Source : calcul de faisabilité en cours — identique à l'affichage dans le planificateur.
+          </p>
+          {(() => {
+            const coffretById = new Map((coffrets.data ?? []).map((c: any) => [c.id, c as { reference: string; name: string }]));
+            const rowsWithMissing = validRows
+              .map((r) => ({ row: r, check: checksByRow.get(r.id) }))
+              .filter(({ check }) => check && !check.ok && check.missing.length > 0);
+            if (rowsWithMissing.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground py-2">
+                  Aucune pièce manquante détectée dans le planificateur. Ajoutez des lignes avec stock insuffisant pour générer un export.
+                </p>
+              );
+            }
+            return (
+              <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+                {rowsWithMissing.map(({ row, check }) => {
+                  const coffret = coffretById.get(row.coffret_id) as any;
+                  return (
+                    <div key={row.id} className="border border-border rounded-sm p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">{coffret?.name ?? row.coffret_id}</span>
+                        <span className="text-xs font-mono text-muted-foreground">×{row.quantity}</span>
+                      </div>
+                      <div className="space-y-1">
+                        {check!.missing.map((m) => (
+                          <div key={m.reference} className="flex items-center justify-between text-xs">
+                            <span className="font-mono text-muted-foreground">{m.reference}</span>
+                            <span className="text-destructive font-medium">−{fmtInt(m.manquant)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportOpen(false)}>Annuler</Button>
-            <Button onClick={runExport} className="flex items-center gap-2">
+            <Button
+              onClick={runExport}
+              disabled={validRows.every((r) => {
+                const c = checksByRow.get(r.id);
+                return !c || c.ok || c.missing.length === 0;
+              })}
+              className="flex items-center gap-2"
+            >
               <FileDown className="h-4 w-4" /> Exporter CSV
             </Button>
           </DialogFooter>
