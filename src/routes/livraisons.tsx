@@ -1188,18 +1188,19 @@ function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: (
   });
 
   const totalTare = palettes.reduce((s: number, p: any) => s + p.tare, 0);
-  const totalContent = palettes.reduce((s: number, p: any) => s + p.contentWeight, 0);
+  // Use shipment lines aggregate when pallet_lines not assigned per-palette
+  const anyPalletLines = palettes.some((p: any) => (p.pallet_lines ?? []).length > 0);
+  const totalContent = anyPalletLines
+    ? palettes.reduce((s: number, p: any) => s + p.contentWeight, 0)
+    : (shipment.lines ?? []).reduce((s: number, l: any) => s + Number(l.displayWeight ?? 0), 0);
   const totalWeight = totalTare + totalContent;
-  const hasMissingWeight = palettes.some((p: any) =>
-    (p.pallet_lines ?? []).some((pl: any) => {
-      const line = linesById.get(pl.shipment_line_id);
-      return !line?.variant?.weight || Number(line.variant.weight) === 0;
-    })
+  const hasMissingWeight = (shipment.lines ?? []).some(
+    (l: any) => !l.displayWeight || Number(l.displayWeight) === 0
   );
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto data-[state=open]:slide-in-from-left-[0%] data-[state=open]:slide-in-from-top-[0%]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers className="h-4 w-4" />
@@ -1242,7 +1243,7 @@ function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: (
                     </div>
                   </div>
 
-                  {(p.pallet_lines ?? []).length > 0 && (
+                  {(p.pallet_lines ?? []).length > 0 ? (
                     <div className="border-t border-border/50 pt-2 space-y-0.5">
                       {(p.pallet_lines as any[]).map((pl: any) => {
                         const line = linesById.get(pl.shipment_line_id);
@@ -1255,6 +1256,10 @@ function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: (
                         );
                       })}
                     </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground italic border-t border-border/50 pt-2">
+                      Contenu non affecté par palette
+                    </p>
                   )}
                 </div>
               );
@@ -1287,16 +1292,7 @@ function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: (
           </div>
         )}
 
-        <DialogFooter className="flex-row justify-between items-center gap-2 mt-2">
-          <Link
-            to="/livraisons/$id"
-            params={{ id: shipment.id }}
-            search={{} as any}
-            className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
-            onClick={onClose}
-          >
-            Gérer les palettes →
-          </Link>
+        <DialogFooter className="mt-2">
           <Button variant="outline" size="sm" onClick={onClose}>Fermer</Button>
         </DialogFooter>
       </DialogContent>
