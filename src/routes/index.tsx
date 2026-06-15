@@ -374,13 +374,25 @@ function Dashboard() {
                   <li key={o.id} className="py-2.5 flex items-center justify-between text-sm gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium truncate">{o.coffret?.name ?? o.coffret_snapshot?.name ?? "—"}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground">OF client</span>
+                        <button
+                          type="button"
+                          className="group flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors cursor-copy"
+                          onClick={() => { navigator.clipboard.writeText(clientRef ?? sysRef); toast.success(`OF ${clientRef ?? sysRef} copié`); }}
+                          title="Copier"
+                        >
+                          {clientRef ?? "—"}
+                          {clientRef && <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />}
+                        </button>
+                      </div>
                       <button
                         type="button"
-                        className="group flex items-center gap-1 text-xs text-muted-foreground font-mono hover:text-foreground transition-colors cursor-copy"
-                        onClick={() => { navigator.clipboard.writeText(displayRef); toast.success(`OF ${displayRef} copié`); }}
-                        title="Copier la référence"
+                        className="group flex items-center gap-1 text-[10px] text-muted-foreground font-mono hover:text-foreground transition-colors cursor-copy"
+                        onClick={() => { navigator.clipboard.writeText(sysRef); toast.success(`OF ${sysRef} copié`); }}
+                        title="Copier la référence système"
                       >
-                        {displayRef}
+                        {sysRef}
                         <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
                       </button>
                     </div>

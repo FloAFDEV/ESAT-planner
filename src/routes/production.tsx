@@ -1142,19 +1142,34 @@ function ProductionPage() {
                 {/* Header — OF client (principal) + OF système + statut */}
                 <div className={`flex items-start justify-between gap-2 px-4 pt-4 pb-3 border-b ${isUrgent ? "border-destructive/20 bg-destructive/5" : "border-border bg-muted/20"} rounded-t-lg`}>
                   <div className="min-w-0 flex-1">
-                    {/* Référence principale : OF client si renseigné, sinon OF système */}
-                    <button
-                      type="button"
-                      className="group flex items-center gap-1.5 font-mono text-base font-bold text-foreground hover:text-info transition-colors cursor-copy"
-                      title={clientOfRef ? "Copier la référence OF client" : "Copier la référence OF"}
-                      onClick={() => { navigator.clipboard.writeText(clientOfRef ?? ofRef); toast.success(MSG.OF_COPIED(clientOfRef ?? ofRef)); }}
-                    >
-                      {clientOfRef ?? ofRef}
-                      <Copy className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
-                    </button>
-                    {/* OF système — affiché en secondaire uniquement si OF client présent */}
+                    {/* OF client — toujours affiché, "—" si non renseigné */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">OF client</span>
+                      {clientOfRef ? (
+                        <button
+                          type="button"
+                          className="group flex items-center gap-1 font-mono text-sm font-bold text-foreground hover:text-info transition-colors cursor-copy"
+                          title="Copier la référence OF client"
+                          onClick={() => { navigator.clipboard.writeText(clientOfRef); toast.success(MSG.OF_COPIED(clientOfRef)); }}
+                        >
+                          {clientOfRef}
+                          <Copy className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
+                        </button>
+                      ) : (
+                        <span className="font-mono text-sm text-muted-foreground">—</span>
+                      )}
+                    </div>
+                    {/* OF système — toujours affiché */}
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {clientOfRef && <span className="text-[11px] text-muted-foreground font-mono">{ofRef}</span>}
+                      <button
+                        type="button"
+                        className="group flex items-center gap-1 text-[11px] text-muted-foreground font-mono hover:text-foreground transition-colors cursor-copy"
+                        title="Copier la référence OF système"
+                        onClick={() => { navigator.clipboard.writeText(ofRef); toast.success(MSG.OF_COPIED(ofRef)); }}
+                      >
+                        {ofRef}
+                        <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
+                      </button>
                       {isUrgent && (
                         <span className="inline-flex items-center rounded-sm border border-destructive/30 bg-destructive/15 text-destructive px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           URGENT
