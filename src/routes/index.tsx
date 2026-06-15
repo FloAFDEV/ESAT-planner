@@ -125,36 +125,92 @@ function Dashboard() {
         <h1 className="text-2xl md:text-3xl font-semibold mt-0.5">{UI.dashboard}</h1>
       </header>
 
-      {/* ── A. Alertes globales ───────────────────────────────────────────── */}
-      <div className={`rounded-lg border px-4 py-3 flex flex-wrap items-center gap-4 ${
-        totalAlerts > 0 ? "border-destructive/30 bg-destructive/5" : "border-border bg-muted/20"
-      }`}>
-        <div className="flex items-center gap-2">
-          <AlertCircle className={`h-4 w-4 ${totalAlerts > 0 ? "text-destructive" : "text-muted-foreground"}`} />
-          <span className={`text-sm font-semibold ${totalAlerts > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-            {totalAlerts > 0 ? `${totalAlerts} alerte${totalAlerts !== 1 ? "s" : ""} actives` : "Aucune alerte"}
-          </span>
+      {/* ── A. Centre d'alertes ──────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <div className={`rounded-lg border px-4 py-3 flex flex-wrap items-center gap-4 ${
+          totalAlerts > 0 ? "border-destructive/30 bg-destructive/5" : "border-border bg-muted/20"
+        }`}>
+          <div className="flex items-center gap-2">
+            <AlertCircle className={`h-4 w-4 ${totalAlerts > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+            <span className={`text-sm font-semibold ${totalAlerts > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+              {totalAlerts > 0 ? `${totalAlerts} alerte${totalAlerts !== 1 ? "s" : ""} actives` : "Aucune alerte"}
+            </span>
+          </div>
+          {totalAlerts > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {productionSignals.pendingMat > 0 && (
+                <Link to="/production" search={{ filterStatus: "pending_material" } as any}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs text-destructive font-medium hover:bg-destructive/20 transition-colors">
+                  <AlertTriangle className="h-3 w-3" />
+                  {productionSignals.pendingMat} OF bloqué{productionSignals.pendingMat !== 1 ? "s" : ""}
+                </Link>
+              )}
+              {productionSignals.urgents > 0 && (
+                <Link to="/production" search={{ filterStatus: "priority" } as any}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs text-destructive font-medium hover:bg-destructive/20 transition-colors">
+                  <AlertCircle className="h-3 w-3" />
+                  {productionSignals.urgents} urgent{productionSignals.urgents !== 1 ? "s" : ""}
+                </Link>
+              )}
+              {stockSignals.rupture > 0 && (
+                <Link to="/stock" search={{ filterHealth: "rupture" } as any}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs text-destructive font-medium hover:bg-destructive/20 transition-colors">
+                  <PackageX className="h-3 w-3" />
+                  {stockSignals.rupture} rupture{stockSignals.rupture !== 1 ? "s" : ""}
+                </Link>
+              )}
+              {stockSignals.critique > 0 && (
+                <Link to="/stock" search={{ filterHealth: "critical" } as any}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning/10 px-2.5 py-1 text-xs text-warning font-medium hover:bg-warning/20 transition-colors">
+                  <TrendingDown className="h-3 w-3" />
+                  {stockSignals.critique} critique{stockSignals.critique !== 1 ? "s" : ""}
+                </Link>
+              )}
+              {livraisonSignals.ready > 0 && (
+                <Link to="/livraisons" search={{ filterStatus: "ready" } as any}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-2.5 py-1 text-xs text-success font-medium hover:bg-success/20 transition-colors">
+                  <Truck className="h-3 w-3" />
+                  {livraisonSignals.ready} prête{livraisonSignals.ready !== 1 ? "s" : ""} à expédier
+                </Link>
+              )}
+            </div>
+          )}
         </div>
-        {totalAlerts > 0 && (
-          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            {stockSignals.rupture > 0 && (
-              <span className="flex items-center gap-1 text-destructive">
-                <PackageX className="h-3 w-3" />
-                {stockSignals.rupture} rupture{stockSignals.rupture !== 1 ? "s" : ""}
-              </span>
-            )}
-            {stockSignals.critique > 0 && (
-              <span className="flex items-center gap-1 text-warning">
-                <TrendingDown className="h-3 w-3" />
-                {stockSignals.critique} seuil{stockSignals.critique !== 1 ? "s" : ""} critique{stockSignals.critique !== 1 ? "s" : ""}
-              </span>
-            )}
-            {productionSignals.pendingMat > 0 && (
-              <span className="flex items-center gap-1 text-warning">
-                <Clock className="h-3 w-3" />
-                {productionSignals.pendingMat} OF bloqué{productionSignals.pendingMat !== 1 ? "s" : ""}
-              </span>
-            )}
+
+        {/* ── À faire aujourd'hui ───────────────────────────────────────── */}
+        {(productionSignals.pendingMat > 0 || productionSignals.urgents > 0 || livraisonSignals.ready > 0 || stockSignals.rupture > 0) && (
+          <div className="rounded-lg border border-border bg-muted/10 px-4 py-3 space-y-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">À traiter</p>
+            <div className="space-y-1.5">
+              {productionSignals.urgents > 0 && (
+                <Link to="/production" search={{ filterStatus: "priority" } as any}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm bg-destructive/5 border border-destructive/20 hover:bg-destructive/10 transition-colors">
+                  <span className="font-medium text-destructive">Traiter {productionSignals.urgents} OF urgent{productionSignals.urgents !== 1 ? "s" : ""}</span>
+                  <span className="text-xs text-muted-foreground">Fabrication →</span>
+                </Link>
+              )}
+              {productionSignals.pendingMat > 0 && (
+                <Link to="/production" search={{ filterStatus: "pending_material" } as any}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm bg-warning/5 border border-warning/20 hover:bg-warning/10 transition-colors">
+                  <span className="font-medium text-warning">Débloquer {productionSignals.pendingMat} OF en attente matière</span>
+                  <span className="text-xs text-muted-foreground">Fabrication →</span>
+                </Link>
+              )}
+              {livraisonSignals.ready > 0 && (
+                <Link to="/livraisons" search={{ filterStatus: "ready" } as any}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm bg-info/5 border border-info/20 hover:bg-info/10 transition-colors">
+                  <span className="font-medium text-info">Expédier {livraisonSignals.ready} shipment{livraisonSignals.ready !== 1 ? "s" : ""} prêt{livraisonSignals.ready !== 1 ? "s" : ""}</span>
+                  <span className="text-xs text-muted-foreground">Expéditions →</span>
+                </Link>
+              )}
+              {stockSignals.rupture > 0 && (
+                <Link to="/stock" search={{ filterHealth: "rupture" } as any}
+                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm bg-destructive/5 border border-destructive/20 hover:bg-destructive/10 transition-colors">
+                  <span className="font-medium text-destructive">Réapprovisionner {stockSignals.rupture} composant{stockSignals.rupture !== 1 ? "s" : ""} en rupture</span>
+                  <span className="text-xs text-muted-foreground">Stock →</span>
+                </Link>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -136,15 +136,17 @@ function StockPage() {
   }), [stockRows]);
 
   function exportStock() {
-    if (stockRows.length === 0) { toast.error("Aucun composant à exporter."); return; }
+    if (filteredRows.length === 0) { toast.error("Aucun composant à exporter."); return; }
     const now = new Date().toISOString().slice(0, 10);
     const healthLabel = { ok: "OK", critical: "Critique", rupture: "Rupture" };
+    const filterLabel = filter !== "all" ? ` — filtre : ${filter}` : "";
+    const searchLabel = search.trim() ? ` — recherche : "${search.trim()}"` : "";
     const lines: string[] = [
-      `﻿Export stock — ${now}`,
+      `﻿Export stock — ${now}${filterLabel}${searchLabel}`,
       "",
       "Référence;Désignation;Stock physique;Stock réservé;Stock disponible;Seuil mini;Santé",
     ];
-    for (const r of stockRows) {
+    for (const r of filteredRows) {
       const sante = healthLabel[r.health] ?? r.health;
       lines.push(`${r.reference ?? "—"};${r.name};${r.stockActuel};${r.stockReserve};${r.stockDisponible};${r.min_stock ?? 0};${sante}`);
     }
