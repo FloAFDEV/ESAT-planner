@@ -129,6 +129,24 @@ function CoffretsPage() {
 
   const activeCoffret = useMemo(() => (coffrets.data ?? []).find((c) => c.id === selectedId), [coffrets.data, selectedId]);
 
+  const reservedByShipment = useQuery({
+    queryKey: ["shipment_lines_reserved"],
+    queryFn: async () => {
+      const { data, error } = await sb
+        .from("shipment_lines")
+        .select("product_variant_id, quantity, shipment:shipments!inner(status)")
+        .in("shipment.status", ["draft", "ready", "shipped"]);
+      if (error) throw error;
+      const map = new Map<string, number>();
+      for (const l of (data ?? []) as any[]) {
+        const id = l.product_variant_id as string;
+        map.set(id, (map.get(id) ?? 0) + Number(l.quantity));
+      }
+      return map;
+    },
+    staleTime: 30_000,
+  });
+
   // ─── Mutations ──────────────────────────────────────────────────────────────
 
   const createCoffret = useMutation({
@@ -282,6 +300,50 @@ function CoffretsPage() {
           </Link>
         </div>
       </header>
+
+      {/* ── Stock fini disponible ── */}
+      {(coffrets.data ?? []).some((c: any) => Number(c.stock_fini ?? 0) > 0) && (
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-medium">Disponibilité stock fini</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider">
+                    <th className="text-left px-4 py-2">Référence</th>
+                    <th className="text-left px-4 py-2">Produit</th>
+                    <th className="text-right px-4 py-2">Fabriqué</th>
+                    <th className="text-right px-4 py-2">Réservé expédition</th>
+                    <th className="text-right px-4 py-2">Disponible</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {(coffrets.data ?? [])
+                    .filter((c: any) => Number(c.stock_fini ?? 0) > 0)
+                    .map((c: any) => {
+                      const fabrique = Number(c.stock_fini ?? 0);
+                      const reserve = reservedByShipment.data?.get(c.id) ?? 0;
+                      const disponible = fabrique - reserve;
+                      return (
+                        <tr key={c.id} className="hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{c.reference}</td>
+                          <td className="px-4 py-2.5 font-medium">{c.name}</td>
+                          <td className="px-4 py-2.5 text-right tabular">{fabrique}</td>
+                          <td className="px-4 py-2.5 text-right tabular text-muted-foreground">{reserve > 0 ? reserve : "—"}</td>
+                          <td className={`px-4 py-2.5 text-right tabular font-semibold ${disponible < 0 ? "text-destructive" : disponible === 0 ? "text-muted-foreground" : "text-foreground"}`}>
+                            {disponible}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Coffret selector ── */}
       <div className="flex items-center gap-3 py-1">

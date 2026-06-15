@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Info, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileDown, Info, Search, Trash2, X } from "lucide-react";
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { record_stock_movement } from "@/lib/stockMovements";
 import { getStockHealth, normalizeProductionStatus, productionStatusMeta, stockHealthMeta, type StockHealth } from "@/lib/domain";
@@ -135,6 +135,26 @@ function StockPage() {
     ok: stockRows.filter((r) => r.health === "ok").length,
   }), [stockRows]);
 
+  function exportStock() {
+    if (stockRows.length === 0) { toast.error("Aucun composant à exporter."); return; }
+    const now = new Date().toISOString().slice(0, 10);
+    const healthLabel = { ok: "OK", critical: "Critique", rupture: "Rupture" };
+    const lines: string[] = [
+      `﻿Export stock — ${now}`,
+      "",
+      "Référence;Désignation;Stock physique;Stock réservé;Stock disponible;Seuil mini;Santé",
+    ];
+    for (const r of stockRows) {
+      const sante = healthLabel[r.health] ?? r.health;
+      lines.push(`${r.reference ?? "—"};${r.name};${r.stockActuel};${r.stockReserve};${r.stockDisponible};${r.min_stock ?? 0};${sante}`);
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `stock-${now}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Export stock téléchargé.");
+  }
+
   return (
     <TooltipProvider delayDuration={400}>
       <div className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -144,6 +164,9 @@ function StockPage() {
             <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Stock</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={exportStock} className="flex items-center gap-2">
+              <FileDown className="h-4 w-4" /> Export stock
+            </Button>
             <Link to="/production" search={{ filterStatus: "all" } as any} className="inline-flex items-center rounded-md border border-input px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">Réserver pour OF</Link>
             <Button variant="outline" onClick={() => { setPresetComponentId(""); setPresetType("OUT"); setPresetReason("Sortie atelier"); setDialogOpen(true); }}>Sortie stock</Button>
             <Button onClick={() => { setPresetComponentId(""); setPresetType("IN"); setPresetReason("Réapprovisionnement"); setDialogOpen(true); }}>+ Réapprovisionnement</Button>
