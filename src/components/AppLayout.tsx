@@ -8,11 +8,11 @@ import agecetLogo from "@/assets/logo_agecet_hands.jpg";
 const NAV = [
   { to: "/", label: UI.dashboard, icon: LayoutDashboard },
   { to: "/production", label: UI.production_orders, icon: Factory },
-  { to: "/archives", label: "Archives", icon: Archive },
-  { to: "/coffrets", label: "Coffrets", icon: Layers },
   { to: "/stock", label: UI.stock, icon: Boxes },
-  { to: "/clients", label: "Clients", icon: Users },
   { to: "/livraisons", label: UI.livraisons, icon: Truck },
+  { to: "/clients", label: "Clients", icon: Users },
+  { to: "/coffrets", label: "Coffrets", icon: Layers },
+  { to: "/archives", label: "Archives", icon: Archive },
 ] as const;
 
 export function AppLayout() {
