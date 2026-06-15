@@ -4,8 +4,9 @@ import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Boxes, Factory, FileJson, FileSpreadsheet, FileText, Flame, PackageCheck, PackageX, TrendingDown, Truck } from "lucide-react";
+import { AlertTriangle, Boxes, Copy, Factory, FileJson, FileSpreadsheet, FileText, Flame, PackageCheck, PackageX, TrendingDown, Truck } from "lucide-react";
 import { fmtInt } from "@/lib/format";
+import { toast } from "sonner";
 import { normalizeLivraisonStatus, normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
 
@@ -365,19 +366,32 @@ function Dashboard() {
               </div>
             ) : (
               <ul className="divide-y divide-border">
-                {ordersList.map((o) => (
+                {ordersList.map((o) => {
+                  const clientRef = o.client_of_reference as string | null;
+                  const sysRef = o.reference ?? o.id.slice(0, 8);
+                  const displayRef = clientRef ?? sysRef;
+                  return (
                   <li key={o.id} className="py-2.5 flex items-center justify-between text-sm gap-3">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{o.coffret?.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{o.reference}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium truncate">{o.coffret?.name ?? o.coffret_snapshot?.name ?? "—"}</div>
+                      <button
+                        type="button"
+                        className="group flex items-center gap-1 text-xs text-muted-foreground font-mono hover:text-foreground transition-colors cursor-copy"
+                        onClick={() => { navigator.clipboard.writeText(displayRef); toast.success(`OF ${displayRef} copié`); }}
+                        title="Copier la référence"
+                      >
+                        {displayRef}
+                        <Copy className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60 transition-opacity" />
+                      </button>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 shrink-0">
                       <span className="font-mono text-sm">×{fmtInt(o.quantity)}</span>
                       <StatusBadge status={o.status} />
-                      <Link to="/production" className="inline-flex items-center rounded-sm border border-input px-2 py-0.5 text-xs hover:bg-accent hover:text-accent-foreground">Reprendre</Link>
+                      <Link to="/production" className="inline-flex items-center rounded-sm border border-input px-2 py-0.5 text-xs hover:bg-accent hover:text-accent-foreground">Voir</Link>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </CardContent>

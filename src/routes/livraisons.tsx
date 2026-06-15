@@ -773,17 +773,19 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
       if (!clientId) throw new Error("Client requis");
       if (totals.items.length === 0) throw new Error("Ajoutez au moins une ligne");
 
-      await sb.from("shipments").update({ client_id: clientId, total_weight: totals.weight, client_of_reference: clientOfRef || null, bl_number: blNumber || null }).eq("id", shipment.id);
-      await sb.from("shipment_lines").delete().eq("shipment_id", shipment.id);
-      const { error: lineError } = await sb.from("shipment_lines").insert(
-        totals.items.map((it) => ({
-          shipment_id: shipment.id,
-          product_variant_id: it.product_variant_id,
-          quantity: it.quantity,
-          weight: it.weight,
-        }))
-      );
+      // Insert new lines first — if this fails, old lines are still intact
+      const newLines = totals.items.map((it) => ({
+        shipment_id: shipment.id,
+        product_variant_id: it.product_variant_id,
+        quantity: it.quantity,
+        weight: it.weight,
+      }));
+      const { data: inserted, error: lineError } = await sb.from("shipment_lines").insert(newLines).select("id");
       if (lineError) throw lineError;
+      // Delete old lines only after insert succeeded
+      const newIds = (inserted ?? []).map((r: any) => r.id);
+      await sb.from("shipment_lines").delete().eq("shipment_id", shipment.id).not("id", "in", `(${newIds.join(",")})`);
+      await sb.from("shipments").update({ client_id: clientId, total_weight: totals.weight, client_of_reference: clientOfRef || null, bl_number: blNumber || null }).eq("id", shipment.id);
     },
     onSuccess: () => {
       toast.success(MSG.SHIPMENT_UPDATED);
