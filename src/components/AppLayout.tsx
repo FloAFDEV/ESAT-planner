@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Factory, Boxes, Truck, Layers, Users, Sun, Moon, LogOut } from "lucide-react";
+import { LayoutDashboard, Factory, Boxes, Truck, Layers, Users, Archive, Sun, Moon, LogOut } from "lucide-react";
 import { UI } from "@/lib/uiLabels";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +8,7 @@ import agecetLogo from "@/assets/logo_agecet_hands.jpg";
 const NAV = [
   { to: "/", label: UI.dashboard, icon: LayoutDashboard },
   { to: "/production", label: UI.production_orders, icon: Factory },
+  { to: "/archives", label: "Archives", icon: Archive },
   { to: "/coffrets", label: "Coffrets", icon: Layers },
   { to: "/stock", label: UI.stock, icon: Boxes },
   { to: "/clients", label: "Clients", icon: Users },

@@ -163,6 +163,7 @@ function ProductionPage() {
       const { data: rawOrders, error } = await sb
         .from("production_orders")
         .select("*, coffret_snapshot")
+        .in("status", ["draft", "priority", "in_progress", "pending_material", "partial"])
         .order("created_at", { ascending: false })
         .limit(200);
       if (error) throw error;

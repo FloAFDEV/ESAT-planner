@@ -9,25 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as StockRouteImport } from './routes/stock'
-import { Route as CoffretsRouteImport } from './routes/coffrets'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProductionRouteImport } from './routes/production'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LivraisonsRouteImport } from './routes/livraisons'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as CoffretsRouteImport } from './routes/coffrets'
 import { Route as ClientsRouteImport } from './routes/clients'
+import { Route as ArchivesRouteImport } from './routes/archives'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LivraisonsIdRouteImport } from './routes/livraisons.$id'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
-  id: '/forgot-password',
-  path: '/forgot-password',
+const StockRoute = StockRouteImport.update({
+  id: '/stock',
+  path: '/stock',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -35,14 +31,24 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClientsRoute = ClientsRouteImport.update({
-  id: '/clients',
-  path: '/clients',
+const ProductionRoute = ProductionRouteImport.update({
+  id: '/production',
+  path: '/production',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StockRoute = StockRouteImport.update({
-  id: '/stock',
-  path: '/stock',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LivraisonsRoute = LivraisonsRouteImport.update({
+  id: '/livraisons',
+  path: '/livraisons',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoffretsRoute = CoffretsRouteImport.update({
@@ -50,14 +56,14 @@ const CoffretsRoute = CoffretsRouteImport.update({
   path: '/coffrets',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProductionRoute = ProductionRouteImport.update({
-  id: '/production',
-  path: '/production',
+const ClientsRoute = ClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LivraisonsRoute = LivraisonsRouteImport.update({
-  id: '/livraisons',
-  path: '/livraisons',
+const ArchivesRoute = ArchivesRouteImport.update({
+  id: '/archives',
+  path: '/archives',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -73,106 +79,106 @@ const LivraisonsIdRoute = LivraisonsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/livraisons': typeof LivraisonsRouteWithChildren
-  '/coffrets': typeof CoffretsRoute
-  '/production': typeof ProductionRoute
-  '/stock': typeof StockRoute
+  '/archives': typeof ArchivesRoute
   '/clients': typeof ClientsRoute
+  '/coffrets': typeof CoffretsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/livraisons': typeof LivraisonsRouteWithChildren
+  '/login': typeof LoginRoute
+  '/production': typeof ProductionRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/stock': typeof StockRoute
   '/livraisons/$id': typeof LivraisonsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/livraisons': typeof LivraisonsRouteWithChildren
-  '/coffrets': typeof CoffretsRoute
-  '/production': typeof ProductionRoute
-  '/stock': typeof StockRoute
+  '/archives': typeof ArchivesRoute
   '/clients': typeof ClientsRoute
+  '/coffrets': typeof CoffretsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/livraisons': typeof LivraisonsRouteWithChildren
+  '/login': typeof LoginRoute
+  '/production': typeof ProductionRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/stock': typeof StockRoute
   '/livraisons/$id': typeof LivraisonsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/forgot-password': typeof ForgotPasswordRoute
-  '/reset-password': typeof ResetPasswordRoute
-  '/livraisons': typeof LivraisonsRouteWithChildren
-  '/coffrets': typeof CoffretsRoute
-  '/production': typeof ProductionRoute
-  '/stock': typeof StockRoute
+  '/archives': typeof ArchivesRoute
   '/clients': typeof ClientsRoute
+  '/coffrets': typeof CoffretsRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/livraisons': typeof LivraisonsRouteWithChildren
+  '/login': typeof LoginRoute
+  '/production': typeof ProductionRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/stock': typeof StockRoute
   '/livraisons/$id': typeof LivraisonsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/login'
-    | '/forgot-password'
-    | '/reset-password'
-    | '/coffrets'
+    | '/archives'
     | '/clients'
+    | '/coffrets'
+    | '/forgot-password'
     | '/livraisons'
+    | '/login'
     | '/production'
+    | '/reset-password'
     | '/stock'
     | '/livraisons/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/login'
-    | '/forgot-password'
-    | '/reset-password'
-    | '/coffrets'
+    | '/archives'
     | '/clients'
+    | '/coffrets'
+    | '/forgot-password'
     | '/livraisons'
+    | '/login'
     | '/production'
+    | '/reset-password'
     | '/stock'
     | '/livraisons/$id'
   id:
     | '__root__'
     | '/'
-    | '/login'
-    | '/forgot-password'
-    | '/reset-password'
-    | '/coffrets'
+    | '/archives'
     | '/clients'
+    | '/coffrets'
+    | '/forgot-password'
     | '/livraisons'
+    | '/login'
     | '/production'
+    | '/reset-password'
     | '/stock'
     | '/livraisons/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LoginRoute: typeof LoginRoute
-  ForgotPasswordRoute: typeof ForgotPasswordRoute
-  ResetPasswordRoute: typeof ResetPasswordRoute
-  CoffretsRoute: typeof CoffretsRoute
+  ArchivesRoute: typeof ArchivesRoute
   ClientsRoute: typeof ClientsRoute
+  CoffretsRoute: typeof CoffretsRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LivraisonsRoute: typeof LivraisonsRouteWithChildren
+  LoginRoute: typeof LoginRoute
   ProductionRoute: typeof ProductionRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   StockRoute: typeof StockRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/forgot-password': {
-      id: '/forgot-password'
-      path: '/forgot-password'
-      fullPath: '/forgot-password'
-      preLoaderRoute: typeof ForgotPasswordRouteImport
+    '/stock': {
+      id: '/stock'
+      path: '/stock'
+      fullPath: '/stock'
+      preLoaderRoute: typeof StockRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -182,13 +188,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/stock': {
-      id: '/stock'
-      path: '/stock'
-      fullPath: '/stock'
-      preLoaderRoute: typeof StockRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/production': {
       id: '/production'
       path: '/production'
@@ -196,11 +195,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductionRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/coffrets': {
-      id: '/coffrets'
-      path: '/coffrets'
-      fullPath: '/coffrets'
-      preLoaderRoute: typeof CoffretsRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/livraisons': {
@@ -210,11 +209,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LivraisonsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coffrets': {
+      id: '/coffrets'
+      path: '/coffrets'
+      fullPath: '/coffrets'
+      preLoaderRoute: typeof CoffretsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clients': {
@@ -222,6 +228,20 @@ declare module '@tanstack/react-router' {
       path: '/clients'
       fullPath: '/clients'
       preLoaderRoute: typeof ClientsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/archives': {
+      id: '/archives'
+      path: '/archives'
+      fullPath: '/archives'
+      preLoaderRoute: typeof ArchivesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/livraisons/$id': {
@@ -247,14 +267,15 @@ const LivraisonsRouteWithChildren = LivraisonsRoute._addFileChildren(
 )
 
 const rootRouteChildren: RootRouteChildren = {
-  LoginRoute: LoginRoute,
-  ForgotPasswordRoute: ForgotPasswordRoute,
-  ResetPasswordRoute: ResetPasswordRoute,
-  CoffretsRoute: CoffretsRoute,
-  ClientsRoute: ClientsRoute,
   IndexRoute: IndexRoute,
+  ArchivesRoute: ArchivesRoute,
+  ClientsRoute: ClientsRoute,
+  CoffretsRoute: CoffretsRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LivraisonsRoute: LivraisonsRouteWithChildren,
+  LoginRoute: LoginRoute,
   ProductionRoute: ProductionRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   StockRoute: StockRoute,
 }
 export const routeTree = rootRouteImport
