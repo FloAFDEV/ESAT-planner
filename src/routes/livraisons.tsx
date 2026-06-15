@@ -1223,27 +1223,17 @@ function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: (
                       <span className="font-semibold text-sm">{p.label || `Palette ${i + 1}`}</span>
                       {p.type && <span className="ml-2 text-xs text-muted-foreground">{p.type}</span>}
                     </div>
-                    <span className="text-xs font-semibold tabular">{fmtKg(p.totalWeight)}</span>
+                    <span className="text-xs font-semibold tabular">{fmtKg(p.tare)}</span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    {dims.length > 0 && (
-                      <div>
-                        <div className="text-muted-foreground">Dimensions</div>
-                        <div className="font-medium">{dims.join(" × ")} cm</div>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-muted-foreground">Palette vide</div>
-                      <div className="font-medium tabular">{fmtKg(p.tare)}</div>
+                  {dims.length > 0 && (
+                    <div className="text-xs">
+                      <div className="text-muted-foreground">Dimensions</div>
+                      <div className="font-medium">{dims.join(" × ")} cm</div>
                     </div>
-                    <div>
-                      <div className="text-muted-foreground">Contenu</div>
-                      <div className="font-medium tabular">{fmtKg(p.contentWeight)}</div>
-                    </div>
-                  </div>
+                  )}
 
-                  {(p.pallet_lines ?? []).length > 0 ? (
+                  {(p.pallet_lines ?? []).length > 0 && (
                     <div className="border-t border-border/50 pt-2 space-y-0.5">
                       {(p.pallet_lines as any[]).map((pl: any) => {
                         const line = linesById.get(pl.shipment_line_id);
@@ -1256,10 +1246,6 @@ function PalettesDetailDialog({ shipment, onClose }: { shipment: any; onClose: (
                         );
                       })}
                     </div>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground italic border-t border-border/50 pt-2">
-                      Contenu non affecté par palette
-                    </p>
                   )}
                 </div>
               );
