@@ -38,7 +38,7 @@ function ArchivesPage() {
       const { data: rawOrders, error } = await sb
         .from("production_orders")
         .select("id,reference,client_of_reference,coffret_id,coffret_snapshot,quantity,produced_qty,status,priority,notes,created_at,done_at")
-        .in("status", ["done", "canceled", "termine", "annule"])
+        .in("status", ["done", "canceled"])
         .order("created_at", { ascending: false })
         .limit(2000);
       if (error) throw error;

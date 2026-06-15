@@ -429,8 +429,8 @@ function ProductionPage() {
 
   const archiveStatuses = useMemo(() => {
     const s: string[] = [];
-    if (archiveIncludeDone) s.push("done", "termine");
-    if (archiveIncludeCanceled) s.push("canceled", "annule");
+    if (archiveIncludeDone) s.push("done");
+    if (archiveIncludeCanceled) s.push("canceled");
     return s;
   }, [archiveIncludeDone, archiveIncludeCanceled]);
 
