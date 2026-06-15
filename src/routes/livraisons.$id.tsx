@@ -195,6 +195,7 @@ function LivraisonDetail() {
       <div className="print:hidden mb-4 flex items-center justify-between gap-2">
         <Link
           to="/livraisons"
+          search={{} as any}
           className="inline-flex items-center gap-1.5 rounded-md border border-input px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Retour
