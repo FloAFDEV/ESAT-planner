@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Search, Trash2, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
 import { fmtInt } from "@/lib/format";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 
@@ -50,7 +52,7 @@ function CoffretsPage() {
   const [newCompPoids, setNewCompPoids] = useState("0");
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [coffretSearch, setCoffretSearch] = useState("");
+  const [coffretComboOpen, setCoffretComboOpen] = useState(false);
 
   const coffrets = useQuery({
     queryKey: ["coffrets", "manage"],
@@ -126,14 +128,6 @@ function CoffretsPage() {
 
   const activeCoffret = useMemo(() => (coffrets.data ?? []).find((c) => c.id === selectedId), [coffrets.data, selectedId]);
 
-  const filteredCoffrets = useMemo(() => {
-    const q = coffretSearch.trim().toLowerCase();
-    if (!q) return coffrets.data ?? [];
-    return (coffrets.data ?? []).filter((c: any) =>
-      (c.reference ?? "").toLowerCase().includes(q) ||
-      (c.name ?? "").toLowerCase().includes(q)
-    );
-  }, [coffrets.data, coffretSearch]);
 
   // ─── Mutations ──────────────────────────────────────────────────────────────
 
@@ -288,51 +282,45 @@ function CoffretsPage() {
         </div>
       </header>
 
-      <div className="grid lg:grid-cols-4 gap-3">
-        {/* Coffret list */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              Coffrets ({filteredCoffrets.length}{coffretSearch.trim() ? `/${(coffrets.data ?? []).length}` : ""})
-            </CardTitle>
-            <div className="relative mt-1.5">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                value={coffretSearch}
-                onChange={(e) => setCoffretSearch(e.target.value)}
-                placeholder="Référence ou nom…"
-                className="pl-8 pr-7 h-8 text-xs"
-              />
-              {coffretSearch && (
-                <button
-                  onClick={() => setCoffretSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-[65vh] overflow-y-auto">
-              {filteredCoffrets.length === 0 && (
-                <p className="px-3 py-4 text-xs text-muted-foreground text-center">Aucun coffret trouvé.</p>
-              )}
-              {filteredCoffrets.map((c: any) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedId(c.id)}
-                  className={`w-full text-left px-3 py-2 border-t border-border text-xs transition-colors ${selectedId === c.id ? "bg-muted" : "hover:bg-muted/50"}`}
-                >
-                  <div className="font-mono">{c.reference}</div>
-                  <div className="truncate text-muted-foreground">{c.name}</div>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-3">
+        {/* Coffret combobox selector */}
+        <div className="flex items-center gap-2">
+          <Popover open={coffretComboOpen} onOpenChange={setCoffretComboOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" role="combobox" aria-expanded={coffretComboOpen} className="w-full max-w-sm justify-between text-sm font-normal">
+                {activeCoffret
+                  ? <span><span className="font-mono text-xs text-muted-foreground mr-2">{activeCoffret.reference}</span>{activeCoffret.name}</span>
+                  : <span className="text-muted-foreground">Sélectionner un coffret…</span>}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[400px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Référence ou nom…" className="h-9" />
+                <CommandList>
+                  <CommandEmpty>Aucun coffret trouvé.</CommandEmpty>
+                  <CommandGroup>
+                    {(coffrets.data ?? []).map((c: any) => (
+                      <CommandItem
+                        key={c.id}
+                        value={`${c.reference} ${c.name}`}
+                        onSelect={() => { setSelectedId(c.id); setCoffretComboOpen(false); }}
+                        className="flex items-center gap-2"
+                      >
+                        <Check className={`h-3.5 w-3.5 shrink-0 ${selectedId === c.id ? "opacity-100" : "opacity-0"}`} />
+                        <span className="font-mono text-xs text-muted-foreground w-28 shrink-0 truncate">{c.reference}</span>
+                        <span className="truncate text-sm">{c.name}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <span className="text-xs text-muted-foreground shrink-0">{(coffrets.data ?? []).length} coffret{(coffrets.data ?? []).length !== 1 ? "s" : ""}</span>
+        </div>
 
-        <div className="lg:col-span-3 space-y-3">
+        <div className="space-y-3">
           {/* Coffret editor */}
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2">
