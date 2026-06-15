@@ -818,6 +818,10 @@ function NewShipmentDialog() {
   const totalWeight = productWeight + palletTareWeight;
   const hasZeroWeight = lineItems.some((it) => it.weight === 0) && lineItems.length > 0;
 
+  // DEBUG TEMPORAIRE — à supprimer après diagnostic
+  console.log("PRODUCT_VARIANTS_COUNT", variants?.data?.length);
+  console.log("PRODUCT_VARIANTS_SAMPLE", variants?.data?.slice(0, 5));
+
   // Suggestion automatique : ceil(qty / nb_par_palette) par variant
   const palletSuggestion = useMemo(() => {
     const validLines = lines.filter((l) => l.product_variant_id && l.quantity > 0);
