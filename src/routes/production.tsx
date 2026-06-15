@@ -53,6 +53,9 @@ export const Route = createFileRoute("/production")({
       { name: "description", content: "Fabrication de coffrets et suivi d'avancement." },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    filterStatus: typeof search.filterStatus === "string" ? search.filterStatus : "all",
+  }),
   component: ProductionPage,
 });
 
@@ -85,8 +88,9 @@ function ProductionPage() {
   const [archiveExporting, setArchiveExporting] = useState(false);
 
   // ── Filtres suivi fabrication ────────────────────────────────────────────
+  const urlSearch = Route.useSearch();
   const [filterSearch, setFilterSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>(() => urlSearch.filterStatus ?? "all");
   const [filterClientRef, setFilterClientRef] = useState<string>("all");
   const [filterDatePreset, setFilterDatePreset] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");

@@ -166,6 +166,7 @@ function Dashboard() {
           label="OF actifs"
           value={String(productionSignals.totalActive)}
           sub={productionSignals.totalActive > 0 ? `${productionSignals.pctBloques}% bloqués` : undefined}
+          linkTo="/production"
         />
         <KPI
           icon={<Factory className="h-4 w-4 text-muted-foreground" />}
@@ -173,12 +174,16 @@ function Dashboard() {
           value={String(productionSignals.draft + productionSignals.urgents)}
           sub={productionSignals.urgents > 0 ? `dont ${productionSignals.urgents} urgent${productionSignals.urgents !== 1 ? "s" : ""}` : undefined}
           accent={productionSignals.urgents > 0 ? "destructive" : undefined}
+          linkTo="/production"
+          linkSearch={{ filterStatus: "draft" }}
         />
         <KPI
           icon={<Factory className="h-4 w-4 text-info" />}
           label="En cours"
           value={String(productionSignals.inProgress + productionSignals.partial)}
           sub={productionSignals.partial > 0 ? `dont ${productionSignals.partial} partiel${productionSignals.partial !== 1 ? "s" : ""}` : undefined}
+          linkTo="/production"
+          linkSearch={{ filterStatus: "in_progress" }}
         />
         <KPI
           icon={<AlertTriangle className="h-4 w-4 text-warning" />}
@@ -186,6 +191,8 @@ function Dashboard() {
           value={String(productionSignals.pendingMat)}
           sub="pièces manquantes"
           accent={productionSignals.pendingMat > 0 ? "warning" : undefined}
+          linkTo="/production"
+          linkSearch={{ filterStatus: "pending_material" }}
         />
       </Section>
 
@@ -198,6 +205,7 @@ function Dashboard() {
             value={String(stockSignals.totalRefs)}
             sub={`${fmtInt(stockSignals.totalStock)} pièces`}
             cols={2}
+            linkTo="/stock"
           />
           <KPI
             icon={<TrendingDown className="h-4 w-4 text-warning" />}
@@ -205,12 +213,16 @@ function Dashboard() {
             value={String(stockSignals.critique)}
             sub={stockSignals.pctCritique > 0 ? `${stockSignals.pctCritique}% du catalogue` : undefined}
             accent={stockSignals.critique > 0 ? "warning" : undefined}
+            linkTo="/stock"
+            linkSearch={{ filterHealth: "critical" }}
           />
           <KPI
             icon={<PackageX className="h-4 w-4 text-destructive" />}
             label="Ruptures"
             value={String(stockSignals.rupture)}
             accent={stockSignals.rupture > 0 ? "destructive" : undefined}
+            linkTo="/stock"
+            linkSearch={{ filterHealth: "rupture" }}
           />
         </Section>
 
@@ -221,16 +233,13 @@ function Dashboard() {
             value={String(livraisonSignals.ready)}
             accent={livraisonSignals.ready > 0 ? "info" : undefined}
             cols={2}
+            linkTo="/livraisons"
           />
           <KPI
             icon={<Truck className="h-4 w-4 text-warning" />}
             label="En transit"
             value={String(livraisonSignals.shipped)}
-          />
-          <KPI
-            icon={<Truck className="h-4 w-4 text-success" />}
-            label="Livrées"
-            value={String(livraisonSignals.delivered)}
+            linkTo="/livraisons"
           />
         </Section>
       </div>
@@ -270,13 +279,15 @@ function Section({ label, icon, to, cta, children }: SectionProps) {
   );
 }
 
-function KPI({ icon, label, value, sub, accent, cols }: {
+function KPI({ icon, label, value, sub, accent, cols, linkTo, linkSearch }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
   accent?: "warning" | "destructive" | "info" | "success";
   cols?: 2;
+  linkTo?: string;
+  linkSearch?: Record<string, string>;
 }) {
   const valueColor =
     accent === "destructive" ? "text-destructive" :
@@ -284,20 +295,28 @@ function KPI({ icon, label, value, sub, accent, cols }: {
     accent === "info"        ? "text-info" :
     accent === "success"     ? "text-success" : "";
 
+  const inner = (
+    <CardContent className="p-3 space-y-1">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+        {icon}
+        <span className="leading-tight">{label}</span>
+      </div>
+      <div className={`text-2xl font-semibold tabular leading-none ${valueColor}`}>
+        {value}
+      </div>
+      {sub && (
+        <div className="text-[10px] text-muted-foreground leading-none">{sub}</div>
+      )}
+    </CardContent>
+  );
+
   return (
-    <Card className={cols === 2 ? "col-span-2" : ""}>
-      <CardContent className="p-3 space-y-1">
-        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-          {icon}
-          <span className="leading-tight">{label}</span>
-        </div>
-        <div className={`text-2xl font-semibold tabular leading-none ${valueColor}`}>
-          {value}
-        </div>
-        {sub && (
-          <div className="text-[10px] text-muted-foreground leading-none">{sub}</div>
-        )}
-      </CardContent>
+    <Card className={`${cols === 2 ? "col-span-2" : ""} ${linkTo ? "cursor-pointer hover:bg-accent/40 transition-colors" : ""}`}>
+      {linkTo ? (
+        <Link to={linkTo as any} search={linkSearch as any} className="block">
+          {inner}
+        </Link>
+      ) : inner}
     </Card>
   );
 }

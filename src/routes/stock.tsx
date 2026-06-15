@@ -35,6 +35,10 @@ export const Route = createFileRoute("/stock")({
       { name: "description", content: "Liste des composants, niveaux de stock et historique des mouvements." },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    filterSearch: typeof search.filterSearch === "string" ? search.filterSearch : "",
+    filterHealth: typeof search.filterHealth === "string" ? search.filterHealth : "all",
+  }),
   component: StockPage,
 });
 
@@ -56,8 +60,9 @@ function StockPage() {
   const [presetComponentId, setPresetComponentId] = useState<string>("");
   const [presetType, setPresetType] = useState<"IN" | "OUT" | "ADJUST">("IN");
   const [presetReason, setPresetReason] = useState<string>("");
-  const [filter, setFilter] = useState<"all" | "rupture" | "critical" | "ok">("all");
-  const [search, setSearch] = useState("");
+  const urlSearch = Route.useSearch();
+  const [filter, setFilter] = useState<"all" | "rupture" | "critical" | "ok">(() => (urlSearch.filterHealth as any) ?? "all");
+  const [search, setSearch] = useState(() => urlSearch.filterSearch ?? "");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; reference: string; name: string; stock: number } | null>(null);
   const [deleteCode, setDeleteCode] = useState<string>("");
@@ -139,7 +144,7 @@ function StockPage() {
             <h1 className="text-3xl md:text-4xl font-display font-semibold mt-1">Stock</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/production" className="inline-flex items-center rounded-md border border-input px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">Réserver pour OF</Link>
+            <Link to="/production" search={{ filterStatus: "all" } as any} className="inline-flex items-center rounded-md border border-input px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground">Réserver pour OF</Link>
             <Button variant="outline" onClick={() => { setPresetComponentId(""); setPresetType("OUT"); setPresetReason("Sortie atelier"); setDialogOpen(true); }}>Sortie stock</Button>
             <Button onClick={() => { setPresetComponentId(""); setPresetType("IN"); setPresetReason("Réapprovisionnement"); setDialogOpen(true); }}>+ Réapprovisionnement</Button>
           </div>
