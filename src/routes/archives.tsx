@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Copy, FileDown, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, FileDown, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ function ArchivesPage() {
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
   const [filterDateTo, setFilterDateTo]     = useState<string>("");
   const [exporting, setExporting]           = useState(false);
+  const [expandedId, setExpandedId]         = useState<string | null>(null);
+  const [consumCache, setConsumCache]       = useState<Record<string, any[]>>({});
 
   const orders = useQuery({
     queryKey: ["production_orders", "archives"],
@@ -166,6 +168,17 @@ function ArchivesPage() {
     }
   }
 
+  async function toggleExpand(orderId: string) {
+    if (expandedId === orderId) { setExpandedId(null); return; }
+    setExpandedId(orderId);
+    if (consumCache[orderId]) return;
+    const { data } = await sb
+      .from("production_consumption")
+      .select("quantity, composant:composants(reference, name)")
+      .eq("production_order_id", orderId);
+    setConsumCache((prev) => ({ ...prev, [orderId]: data ?? [] }));
+  }
+
   const total = (orders.data ?? []).length;
 
   return (
@@ -255,6 +268,7 @@ function ArchivesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider">
+                    <th className="w-8 px-2 py-2.5"></th>
                     <th className="text-left px-4 py-2.5">OF client</th>
                     <th className="text-left px-4 py-2.5">OF système</th>
                     <th className="text-left px-4 py-2.5">Coffret</th>
@@ -275,9 +289,19 @@ function ArchivesPage() {
                     const meta        = productionStatusMeta[String(o.status)];
 
                     return (
-                      <tr key={o.id} className="hover:bg-muted/20 transition-colors">
+                      <>
+                      <tr
+                        key={o.id}
+                        className="hover:bg-muted/20 transition-colors cursor-pointer"
+                        onClick={() => toggleExpand(o.id)}
+                      >
+                        <td className="px-2 py-3 text-muted-foreground">
+                          {expandedId === o.id
+                            ? <ChevronDown className="h-3.5 w-3.5" />
+                            : <ChevronRight className="h-3.5 w-3.5" />}
+                        </td>
                         {/* OF client */}
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           {clientRef ? (
                             <button
                               type="button"
@@ -293,7 +317,7 @@ function ArchivesPage() {
                           )}
                         </td>
                         {/* OF système */}
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             className="group flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-foreground transition-colors cursor-copy"
@@ -330,6 +354,40 @@ function ArchivesPage() {
                           }
                         </td>
                       </tr>
+                      {expandedId === o.id && (
+                        <tr key={`${o.id}-detail`} className="bg-muted/10">
+                          <td colSpan={9} className="px-8 py-3">
+                            {!consumCache[o.id] ? (
+                              <p className="text-xs text-muted-foreground">Chargement…</p>
+                            ) : consumCache[o.id].length === 0 ? (
+                              <p className="text-xs text-muted-foreground italic">Aucune consommation enregistrée.</p>
+                            ) : (
+                              <div className="space-y-1">
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Composants consommés</p>
+                                <table className="text-xs w-full max-w-lg">
+                                  <thead>
+                                    <tr className="text-muted-foreground">
+                                      <th className="text-left pb-1 pr-6">Référence</th>
+                                      <th className="text-left pb-1 pr-6">Nom</th>
+                                      <th className="text-right pb-1">Qté consommée</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border/50">
+                                    {consumCache[o.id].map((c: any, i: number) => (
+                                      <tr key={i}>
+                                        <td className="py-1 pr-6 font-mono text-muted-foreground">{c.composant?.reference ?? "—"}</td>
+                                        <td className="py-1 pr-6">{c.composant?.name ?? "—"}</td>
+                                        <td className="py-1 text-right font-mono tabular">{fmtInt(c.quantity)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </>
                     );
                   })}
                 </tbody>
