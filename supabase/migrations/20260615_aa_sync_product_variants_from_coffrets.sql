@@ -34,6 +34,9 @@ FROM public.coffrets c
 WHERE c.deleted_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM public.product_variants pv WHERE pv.id = c.id
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM public.product_variants pv WHERE pv.reference = c.reference
   );
 
 -- ── 2. RESYNC des lignes existantes (weight + nb_par_palette à jour) ──────
