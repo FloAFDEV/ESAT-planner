@@ -36,7 +36,8 @@ function Dashboard() {
   });
 
   const orders = useQuery({
-    queryKey: ["production_orders", "active"],
+    queryKey: ["production_orders", "dashboard"],
+    refetchOnMount: "always",
     refetchInterval: 10_000,
     queryFn: async () => {
       const { data, error } = await sb
@@ -52,7 +53,8 @@ function Dashboard() {
   });
 
   const shipments = useQuery({
-    queryKey: ["shipments", "active"],
+    queryKey: ["shipments", "dashboard"],
+    refetchOnMount: "always",
     refetchInterval: 15_000,
     queryFn: async () => {
       const { data, error } = await sb

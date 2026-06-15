@@ -440,8 +440,8 @@ function ProductionPage() {
     return (orders.data ?? []).filter((o: any) => {
       const st = String(o.status);
       const matches =
-        (archiveIncludeDone && (st === "done" || st === "termine")) ||
-        (archiveIncludeCanceled && (st === "canceled" || st === "annule"));
+        (archiveIncludeDone && st === "done") ||
+        (archiveIncludeCanceled && st === "canceled");
       if (!matches) return false;
       if (cutoff && new Date(o.created_at) >= cutoff) return false;
       return true;
