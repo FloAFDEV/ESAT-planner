@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Package, Plus, Save, Scale, Trash2 } from "lucide-react";
 import { fmtInt } from "@/lib/format";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 
@@ -41,7 +41,6 @@ function CoffretsPage() {
   const [newCompQty, setNewCompQty] = useState("1");
   const [feasibilityQty, setFeasibilityQty] = useState("1");
 
-  // Dialog states
   const [newCoffretOpen, setNewCoffretOpen] = useState(false);
   const [newCoffretRef, setNewCoffretRef] = useState("");
   const [newCoffretName, setNewCoffretName] = useState("");
@@ -72,13 +71,15 @@ function CoffretsPage() {
     queryFn: async () => {
       const { data, error } = await sb
         .from("composants")
-        .select("id,reference,name")
+        .select("id,reference,name,stock,min_stock,reserved_stock")
         .is("deleted_at", null)
         .order("reference");
       if (error) throw error;
       return data as any[];
     },
   });
+
+  const composantMap = useMemo(() => new Map((composants.data ?? []).map((c: any) => [c.id, c])), [composants.data]);
 
   // BOM uses nomenclatures (source of truth for production)
   const bomLines = useQuery({
@@ -95,19 +96,19 @@ function CoffretsPage() {
       const composantIds = Array.from(
         new Set(((nomRows ?? []) as any[]).map((n) => n.composant_id).filter(Boolean))
       );
-      let composantMap = new Map<string, any>();
+      let composantMapLocal = new Map<string, any>();
       if (composantIds.length > 0) {
         const { data: composantsData, error: composantsError } = await sb
           .from("composants")
-          .select("id,reference,name")
+          .select("id,reference,name,stock,min_stock,reserved_stock")
           .in("id", composantIds);
         if (composantsError) throw composantsError;
-        composantMap = new Map((composantsData ?? []).map((c: any) => [c.id, c]));
+        composantMapLocal = new Map((composantsData ?? []).map((c: any) => [c.id, c]));
       }
 
       return ((nomRows ?? []) as any[]).map((n) => ({
         ...n,
-        composant: composantMap.get(n.composant_id) ?? null,
+        composant: composantMapLocal.get(n.composant_id) ?? null,
       })) as any[];
     },
   });
@@ -127,7 +128,6 @@ function CoffretsPage() {
   }, [coffrets.data, selectedId]);
 
   const activeCoffret = useMemo(() => (coffrets.data ?? []).find((c) => c.id === selectedId), [coffrets.data, selectedId]);
-
 
   // ─── Mutations ──────────────────────────────────────────────────────────────
 
@@ -264,146 +264,228 @@ function CoffretsPage() {
     queryFn: async () => getProductionFeasibility(selectedId, feasibilityQuantity),
   });
 
+  const totalCoffrets = (coffrets.data ?? []).length;
+
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <header className="mb-4 flex items-end justify-between flex-wrap gap-2">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+      {/* ── Header ── */}
+      <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Référentiel</p>
-          <h1 className="text-2xl md:text-3xl font-semibold mt-1">Coffrets</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold mt-0.5">Coffrets</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setNewComposantOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Nouveau composant
+          <Button variant="outline" size="sm" onClick={() => setNewComposantOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Nouveau composant
           </Button>
-          <Button onClick={() => setNewCoffretOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Nouveau coffret
+          <Button size="sm" onClick={() => setNewCoffretOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Nouveau coffret
           </Button>
-          <Link to="/production" className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground">Produire</Link>
+          <Link to="/production" className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors">
+            Produire →
+          </Link>
         </div>
       </header>
 
-      <div className="space-y-3">
-        {/* Coffret combobox selector */}
-        <div className="flex items-center gap-2">
-          <Popover open={coffretComboOpen} onOpenChange={setCoffretComboOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" role="combobox" aria-expanded={coffretComboOpen} className="w-full max-w-sm justify-between text-sm font-normal">
-                {activeCoffret
-                  ? <span><span className="font-mono text-xs text-muted-foreground mr-2">{activeCoffret.reference}</span>{activeCoffret.name}</span>
-                  : <span className="text-muted-foreground">Sélectionner un coffret…</span>}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[400px] p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Référence ou nom…" className="h-9" />
-                <CommandList>
-                  <CommandEmpty>Aucun coffret trouvé.</CommandEmpty>
-                  <CommandGroup>
-                    {(coffrets.data ?? []).map((c: any) => (
-                      <CommandItem
-                        key={c.id}
-                        value={`${c.reference} ${c.name}`}
-                        onSelect={() => { setSelectedId(c.id); setCoffretComboOpen(false); }}
-                        className="flex items-center gap-2"
-                      >
-                        <Check className={`h-3.5 w-3.5 shrink-0 ${selectedId === c.id ? "opacity-100" : "opacity-0"}`} />
-                        <span className="font-mono text-xs text-muted-foreground w-28 shrink-0 truncate">{c.reference}</span>
-                        <span className="truncate text-sm">{c.name}</span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          <span className="text-xs text-muted-foreground shrink-0">{(coffrets.data ?? []).length} coffret{(coffrets.data ?? []).length !== 1 ? "s" : ""}</span>
-        </div>
-
-        <div className="space-y-3">
-          {/* Coffret editor */}
-          <Card>
-            <CardHeader className="flex-row items-center justify-between gap-2">
-              <CardTitle className="text-base">Édition coffret</CardTitle>
-              {activeCoffret && (
-                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Archiver
-                </Button>
+      {/* ── Coffret selector ── */}
+      <div className="flex items-center gap-3 py-1">
+        <Popover open={coffretComboOpen} onOpenChange={setCoffretComboOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={coffretComboOpen}
+              className="w-full max-w-md justify-between h-9 text-sm font-normal"
+            >
+              {activeCoffret ? (
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground shrink-0">{activeCoffret.reference}</span>
+                  <span className="truncate">{activeCoffret.name}</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Sélectionner un coffret…</span>
               )}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-40" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[480px] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Référence ou désignation…" className="h-9" />
+              <CommandList>
+                <CommandEmpty>Aucun coffret trouvé.</CommandEmpty>
+                <CommandGroup>
+                  {(coffrets.data ?? []).map((c: any) => (
+                    <CommandItem
+                      key={c.id}
+                      value={`${c.reference} ${c.name}`}
+                      onSelect={() => { setSelectedId(c.id); setCoffretComboOpen(false); }}
+                      className="flex items-center gap-2 py-2"
+                    >
+                      <Check className={`h-3.5 w-3.5 shrink-0 text-primary ${selectedId === c.id ? "opacity-100" : "opacity-0"}`} />
+                      <span className="font-mono text-xs text-muted-foreground w-32 shrink-0 truncate">{c.reference}</span>
+                      <span className="truncate text-sm">{c.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        <span className="text-xs text-muted-foreground shrink-0 tabular">
+          {totalCoffrets} coffret{totalCoffrets !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {/* ── Content (only when coffret selected) ── */}
+      {!activeCoffret && !coffrets.isLoading && (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Sélectionnez un coffret pour voir et éditer ses informations.
+          </CardContent>
+        </Card>
+      )}
+
+      {activeCoffret && (
+        <div className="space-y-4">
+          {/* ── Fiche coffret ── */}
+          <Card>
+            <CardHeader className="pb-3 flex-row items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-0.5">Identité</p>
+                <CardTitle className="text-base leading-none">{activeCoffret.reference} — {activeCoffret.name}</CardTitle>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/50 hover:bg-destructive/5"
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Archiver
+              </Button>
             </CardHeader>
-            <CardContent className="grid md:grid-cols-4 gap-3 items-end">
-              <div className="space-y-1">
-                <Label>Référence</Label>
-                <Input value={editRef} onChange={(e) => setEditRef(e.target.value)} disabled={!activeCoffret} />
+            <CardContent className="space-y-4">
+              {/* Identité */}
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Référence</Label>
+                  <Input value={editRef} onChange={(e) => setEditRef(e.target.value)} className="font-mono" />
+                </div>
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Désignation</Label>
+                  <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                </div>
               </div>
-              <div className="space-y-1 md:col-span-2">
-                <Label>Désignation</Label>
-                <Input value={editName} onChange={(e) => setEditName(e.target.value)} disabled={!activeCoffret} />
+
+              {/* Poids & palette */}
+              <div className="border border-border/60 rounded-md p-3 bg-muted/20 space-y-2">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                  <Scale className="h-3 w-3" /> Poids & conditionnement
+                </p>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Poids coffret (kg)</Label>
+                    <Input type="number" min="0" step="0.01" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="tabular" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Nb par palette</Label>
+                    <Input type="number" min="1" value={editNbPerPalette} onChange={(e) => setEditNbPerPalette(e.target.value)} className="tabular" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Poids palette vide (kg)</Label>
+                    <Input type="number" min="0" step="0.1" value={editPaletteWeight} onChange={(e) => setEditPaletteWeight(e.target.value)} className="tabular" />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label>Poids coffret (kg)</Label>
-                <Input type="number" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} disabled={!activeCoffret} />
-              </div>
-              <div className="space-y-1">
-                <Label>Nb par palette</Label>
-                <Input type="number" min="1" value={editNbPerPalette} onChange={(e) => setEditNbPerPalette(e.target.value)} disabled={!activeCoffret} />
-              </div>
-              <div className="space-y-1">
-                <Label>Poids palette (kg)</Label>
-                <Input type="number" min="0" value={editPaletteWeight} onChange={(e) => setEditPaletteWeight(e.target.value)} disabled={!activeCoffret} />
-              </div>
-              <div className="md:col-span-4 text-right">
-                <Button onClick={() => saveCoffret.mutate()} disabled={!activeCoffret || saveCoffret.isPending}>Enregistrer</Button>
+
+              {/* Save bar */}
+              <div className="flex justify-end pt-1">
+                <Button onClick={() => saveCoffret.mutate()} disabled={saveCoffret.isPending} className="gap-1.5">
+                  <Save className="h-3.5 w-3.5" />
+                  {saveCoffret.isPending ? "Enregistrement…" : "Enregistrer"}
+                </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* BOM editor */}
+          {/* ── Nomenclature ── */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Nomenclature (composants du coffret)</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-0.5">Nomenclature</p>
+                  <CardTitle className="text-base leading-none flex items-center gap-1.5">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    Composants du coffret
+                    {(bomLines.data ?? []).length > 0 && (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        · {(bomLines.data ?? []).length} ligne{(bomLines.data ?? []).length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </CardTitle>
+                </div>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid md:grid-cols-4 gap-2 items-end">
-                <div className="md:col-span-2 space-y-1">
-                  <Label>Composant</Label>
+              {/* Add line */}
+              <div className="flex gap-2 items-end bg-muted/30 rounded-md p-3 border border-border/50">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Composant</Label>
                   <Select value={newCompId} onValueChange={setNewCompId}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Sélectionner un composant…" />
+                    </SelectTrigger>
                     <SelectContent>
-                      {(composants.data ?? []).map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.reference} · {c.name}</SelectItem>
+                      {(composants.data ?? []).map((c: any) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          <span className="font-mono mr-1.5 text-muted-foreground">{c.reference}</span>
+                          {c.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label>Qté</Label>
-                  <Input type="number" min="1" value={newCompQty} onChange={(e) => setNewCompQty(e.target.value)} />
+                <div className="w-20 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Qté</Label>
+                  <Input type="number" min="1" value={newCompQty} onChange={(e) => setNewCompQty(e.target.value)} className="h-8 text-xs text-right tabular" />
                 </div>
-                <Button onClick={() => addBomLine.mutate()} disabled={addBomLine.isPending || !selectedId || !newCompId}>
-                  <Plus className="h-4 w-4 mr-1" /> Ajouter
+                <Button
+                  size="sm"
+                  onClick={() => addBomLine.mutate()}
+                  disabled={addBomLine.isPending || !newCompId}
+                  className="h-8"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Ajouter
                 </Button>
               </div>
 
-              <div className="overflow-x-auto border border-border rounded-sm">
+              {/* BOM table */}
+              <div className="border border-border rounded-md overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted/95 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th className="text-left p-2">Réf.</th>
-                      <th className="text-left p-2">Désignation</th>
-                      <th className="text-right p-2">Qté</th>
-                      <th className="text-right p-2">Actions</th>
+                  <thead>
+                    <tr className="bg-muted/60 border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
+                      <th className="text-left px-3 py-2 w-32">Réf.</th>
+                      <th className="text-left px-3 py-2">Désignation</th>
+                      <th className="text-right px-3 py-2 w-24">Qté</th>
+                      <th className="text-right px-3 py-2 w-28">Stock</th>
+                      <th className="text-right px-3 py-2 w-28">Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {(bomLines.data ?? []).map((n) => (
-                      <BomComponentRow
-                        key={n.id}
-                        row={n}
-                        onSave={(quantity) => updateBomLine.mutate({ id: n.id, quantity })}
-                        onDelete={() => deleteBomLine.mutate(n.id)}
-                      />
-                    ))}
-                    {(bomLines.data ?? []).length === 0 && (
-                      <tr><td className="p-3 text-sm text-muted-foreground" colSpan={4}>Aucune ligne. Sélectionner un coffret et ajouter des composants.</td></tr>
+                  <tbody className="divide-y divide-border">
+                    {(bomLines.data ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                          Aucune ligne — ajoutez des composants ci-dessus.
+                        </td>
+                      </tr>
+                    ) : (
+                      (bomLines.data ?? []).map((n: any) => (
+                        <BomComponentRow
+                          key={n.id}
+                          row={n}
+                          onSave={(quantity) => updateBomLine.mutate({ id: n.id, quantity })}
+                          onDelete={() => deleteBomLine.mutate(n.id)}
+                        />
+                      ))
                     )}
                   </tbody>
                 </table>
@@ -411,13 +493,18 @@ function CoffretsPage() {
             </CardContent>
           </Card>
 
-          {/* Feasibility */}
+          {/* ── Faisabilité ── */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Faisabilité production</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-0.5">Simulation</p>
+              <CardTitle className="text-base leading-none">Faisabilité production</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
-              <div className="max-w-xs space-y-1">
-                <Label>Quantité à produire</Label>
-                <Input type="number" min="1" value={feasibilityQty} onChange={(e) => setFeasibilityQty(e.target.value)} />
+              <div className="flex items-end gap-3 max-w-xs">
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Quantité à produire</Label>
+                  <Input type="number" min="1" value={feasibilityQty} onChange={(e) => setFeasibilityQty(e.target.value)} className="tabular" />
+                </div>
               </div>
 
               {feasibilityQuantity <= 0 ? (
@@ -425,56 +512,65 @@ function CoffretsPage() {
               ) : feasibility.isLoading ? (
                 <p className="text-sm text-muted-foreground">Calcul en cours…</p>
               ) : !feasibility.data ? null : (
-                <>
-                  <div className={`rounded-md border px-3 py-2 text-sm font-medium ${feasibility.data.can_produce ? "border-success/30 bg-success/10 text-success" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>
-                    {feasibility.data.can_produce ? "Fabrication possible ✓" : "Fabrication impossible"}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      ({fmtInt(feasibility.data.summary.total_components)} composants · {fmtInt(feasibility.data.summary.total_missing)} manquants)
+                <div className="space-y-3">
+                  <div className={`rounded-md border px-4 py-2.5 text-sm font-medium flex items-center justify-between ${
+                    feasibility.data.can_produce
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  }`}>
+                    <span>{feasibility.data.can_produce ? "Fabrication possible ✓" : "Fabrication impossible ✗"}</span>
+                    <span className="text-xs font-normal opacity-70">
+                      {fmtInt(feasibility.data.summary.total_components)} composants · {fmtInt(feasibility.data.summary.total_missing)} manquant{feasibility.data.summary.total_missing !== 1 ? "s" : ""}
                     </span>
                   </div>
-                  <div className="overflow-x-auto border border-border rounded-sm">
+
+                  <div className="border border-border rounded-md overflow-hidden">
                     <table className="w-full text-sm">
-                      <thead className="bg-muted/95 text-[11px] uppercase tracking-wider text-muted-foreground">
-                        <tr>
-                          <th className="text-left p-2">Composant</th>
-                          <th className="text-right p-2">Besoin</th>
-                          <th className="text-right p-2">Disponible</th>
-                          <th className="text-center p-2">État</th>
+                      <thead>
+                        <tr className="bg-muted/60 border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground">
+                          <th className="text-left px-3 py-2">Composant</th>
+                          <th className="text-right px-3 py-2 w-24">Besoin</th>
+                          <th className="text-right px-3 py-2 w-28">Disponible</th>
+                          <th className="text-center px-3 py-2 w-28">État</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-border">
                         {feasibility.data.components.map((c) => (
-                          <tr key={c.composant_id} className="border-t border-border">
-                            <td className="p-2 font-medium">{c.name}</td>
-                            <td className="p-2 text-right tabular">{fmtInt(c.needed)}</td>
-                            <td className="p-2 text-right tabular">{fmtInt(c.available)}</td>
-                            <td className="p-2 text-center">
-                              {c.status === "ok"
-                                ? <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-success/15 text-success border border-success/30">OK</span>
-                                : <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-destructive/15 text-destructive border border-destructive/30">Manque {fmtInt(c.missing)}</span>}
+                          <tr key={c.composant_id} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-3 py-2 font-medium">{c.name}</td>
+                            <td className="px-3 py-2 text-right tabular">{fmtInt(c.needed)}</td>
+                            <td className="px-3 py-2 text-right tabular">{fmtInt(c.available)}</td>
+                            <td className="px-3 py-2 text-center">
+                              {c.status === "ok" ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-[11px] font-medium bg-success/15 text-success border border-success/30">OK</span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-[11px] font-medium bg-destructive/15 text-destructive border border-destructive/30">
+                                  −{fmtInt(c.missing)}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
-      </div>
+      )}
 
       {/* ── Nouveau coffret dialog ── */}
       <Dialog open={newCoffretOpen} onOpenChange={setNewCoffretOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Nouveau coffret</DialogTitle></DialogHeader>
           <div className="space-y-3 py-1">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Référence <span className="text-destructive">*</span></Label>
-              <Input value={newCoffretRef} onChange={(e) => setNewCoffretRef(e.target.value)} placeholder="ex: CST250THD" />
+              <Input value={newCoffretRef} onChange={(e) => setNewCoffretRef(e.target.value)} placeholder="ex: CST250THD" className="font-mono" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Désignation <span className="text-destructive">*</span></Label>
               <Input value={newCoffretName} onChange={(e) => setNewCoffretName(e.target.value)} placeholder="Nom du coffret" />
             </div>
@@ -491,17 +587,17 @@ function CoffretsPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Nouveau composant</DialogTitle></DialogHeader>
           <div className="space-y-3 py-1">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Référence <span className="text-destructive">*</span></Label>
-              <Input value={newCompRef} onChange={(e) => setNewCompRef(e.target.value)} placeholder="ex: 857432" />
+              <Input value={newCompRef} onChange={(e) => setNewCompRef(e.target.value)} placeholder="ex: 857432" className="font-mono" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Désignation <span className="text-destructive">*</span></Label>
               <Input value={newCompName} onChange={(e) => setNewCompName(e.target.value)} placeholder="Nom de la pièce" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>Poids unitaire (kg)</Label>
-              <Input type="number" min="0" step="0.001" value={newCompPoids} onChange={(e) => setNewCompPoids(e.target.value)} />
+              <Input type="number" min="0" step="0.001" value={newCompPoids} onChange={(e) => setNewCompPoids(e.target.value)} className="tabular" />
             </div>
           </div>
           <DialogFooter>
@@ -530,17 +626,63 @@ function CoffretsPage() {
 
 function BomComponentRow({ row, onSave, onDelete }: { row: any; onSave: (q: number) => void; onDelete: () => void }) {
   const [qty, setQty] = useState(String(row.quantity ?? 1));
+  const isDirty = qty !== String(row.quantity ?? 1);
+
+  const dispo = Math.max(0, Number(row.composant?.stock ?? 0) - Number(row.composant?.reserved_stock ?? 0));
+  const min = Number(row.composant?.min_stock ?? 0);
+  const isRupture = dispo <= 0;
+  const isCritique = !isRupture && dispo <= min && min > 0;
+
   return (
-    <tr className="border-t border-border">
-      <td className="p-2 font-mono text-xs text-muted-foreground">{row.composant?.reference}</td>
-      <td className="p-2">{row.composant?.name}</td>
-      <td className="p-2 text-right w-28">
-        <Input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} className="text-right" />
+    <tr className="hover:bg-muted/20 transition-colors group">
+      <td className="px-3 py-2">
+        <span className="font-mono text-xs text-muted-foreground">{row.composant?.reference ?? "—"}</span>
       </td>
-      <td className="p-2 text-right">
-        <div className="inline-flex gap-1">
-          <Button variant="outline" size="sm" onClick={() => onSave(parseInt(qty, 10) || 1)}>Sauver</Button>
-          <Button variant="outline" size="sm" onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></Button>
+      <td className="px-3 py-2">
+        <span className="text-sm">{row.composant?.name ?? "—"}</span>
+      </td>
+      <td className="px-3 py-2 text-right w-24">
+        <Input
+          type="number"
+          min="1"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="text-right h-7 text-xs w-20 tabular ml-auto"
+        />
+      </td>
+      <td className="px-3 py-2 text-right w-28">
+        {row.composant ? (
+          isRupture ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-destructive">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive" />
+              Rupture
+            </span>
+          ) : isCritique ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-warning" />
+              {fmtInt(dispo)}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground tabular">{fmtInt(dispo)}</span>
+          )
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2 text-right w-28">
+        <div className="inline-flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+          <Button
+            variant={isDirty ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs px-2"
+            onClick={() => onSave(parseInt(qty, 10) || 1)}
+          >
+            <Save className="h-3 w-3 mr-1" />
+            Sauver
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/5" onClick={onDelete}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
         </div>
       </td>
     </tr>
