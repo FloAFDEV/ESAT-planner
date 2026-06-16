@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -55,6 +55,7 @@ export const Route = createFileRoute("/production")({
   }),
   validateSearch: (search: Record<string, unknown>) => ({
     filterStatus: typeof search.filterStatus === "string" ? search.filterStatus : "all",
+    showDone:     search.showDone === "true" || search.showDone === true,
   }),
   component: ProductionPage,
 });
@@ -92,8 +93,13 @@ function ProductionPage() {
 
   // ── Filtres suivi fabrication ────────────────────────────────────────────
   const urlSearch = Route.useSearch();
+  const navigate = useNavigate();
   const [filterSearch, setFilterSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>(() => urlSearch.filterStatus ?? "all");
+  const showDone = urlSearch.showDone ?? false;
+  function setShowDone(v: boolean) {
+    navigate({ to: "/production", search: (prev: any) => ({ ...prev, showDone: v || undefined }), replace: true });
+  }
   const [filterClientRef, setFilterClientRef] = useState<string>("all");
   const [filterDatePreset, setFilterDatePreset] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState<string>("");
@@ -166,14 +172,22 @@ function ProductionPage() {
     validRows.every((row) => !!checksByRow.get(row.id));
 
   const orders = useQuery({
-    queryKey: ["production_orders", "atelier"],
+    queryKey: ["production_orders", "atelier", showDone],
     queryFn: async () => {
-      const { data: rawOrders, error } = await sb
+      const activeStatuses = ["draft", "priority", "in_progress", "pending_material", "partial"];
+      const statuses = showDone ? [...activeStatuses, "done"] : activeStatuses;
+      let q = sb
         .from("production_orders")
         .select("*, coffret_snapshot")
-        .in("status", ["draft", "priority", "in_progress", "pending_material", "partial"])
+        .in("status", statuses)
         .order("created_at", { ascending: false })
         .limit(200);
+      if (showDone) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        q = q.or(`status.neq.done,created_at.gte.${cutoff.toISOString()}`);
+      }
+      const { data: rawOrders, error } = await q;
       if (error) throw error;
 
       const filtered = ((rawOrders ?? []) as any[]).map((row) => ({
@@ -267,7 +281,7 @@ function ProductionPage() {
     return list;
   }, [orders.data, filterSearch, filterStatus, filterClientRef, filterDatePreset, filterDateFrom, filterDateTo]);
 
-  const hasActiveFilters = filterSearch || filterStatus !== "all" || filterClientRef !== "all" || filterDatePreset !== "all" || filterDateFrom || filterDateTo;
+  const hasActiveFilters = filterSearch || filterStatus !== "all" || filterClientRef !== "all" || filterDatePreset !== "all" || filterDateFrom || filterDateTo || showDone;
 
   function resetFilters() {
     setFilterSearch("");
@@ -276,6 +290,7 @@ function ProductionPage() {
     setFilterDatePreset("all");
     setFilterDateFrom("");
     setFilterDateTo("");
+    setShowDone(false);
   }
 
   const deficitChecks = useQuery({
@@ -1230,6 +1245,17 @@ function ProductionPage() {
                 <SelectItem value="custom">Plage personnalisée</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Toggle OF terminés */}
+            <button
+              onClick={() => setShowDone(!showDone)}
+              className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md border text-xs transition-colors ${showDone ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:bg-muted"}`}
+            >
+              <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 ${showDone ? "bg-primary-foreground border-primary-foreground" : "border-muted-foreground"}`}>
+                {showDone && <span className="text-primary text-[10px] font-bold leading-none">✓</span>}
+              </span>
+              Terminés récents
+            </button>
 
             {/* Reset */}
             {hasActiveFilters && (
