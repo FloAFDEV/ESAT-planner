@@ -13,6 +13,12 @@
 
 BEGIN;
 
+-- ── 0. Autoriser coffret_id = NULL pour les OF custom ────────────────────
+-- coffret_id était NOT NULL → doit devenir nullable pour les fabrications libres.
+-- Les OFs coffret existants conservent leur coffret_id, aucune donnée touchée.
+ALTER TABLE public.production_orders
+  ALTER COLUMN coffret_id DROP NOT NULL;
+
 -- ── 1. Colonnes ───────────────────────────────────────────────────────────
 
 ALTER TABLE public.production_orders
