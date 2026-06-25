@@ -16,6 +16,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileDown, Info, Search, 
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { record_stock_movement } from "@/lib/stockMovements";
 import { getStockHealth, normalizeProductionStatus, productionStatusMeta, stockHealthMeta, type StockHealth } from "@/lib/domain";
+import { calcStockDispo } from "@/lib/stockUtils";
 
 type StockRow = {
   id: string;
@@ -114,7 +115,7 @@ function StockPage() {
     return (composants.data ?? []).map((c: any) => {
       const stockActuel = Number(c.stock ?? 0);
       const stockReserve = Math.max(0, Number(c.reserved_stock ?? 0));
-      const stockDisponible = stockActuel - stockReserve;
+      const stockDisponible = calcStockDispo(stockActuel, stockReserve);
       const health = getStockHealth(stockDisponible, Number(c.min_stock ?? 0));
       return { ...c, stockActuel, stockDisponible, stockReserve, health };
     });

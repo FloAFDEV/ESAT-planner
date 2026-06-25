@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 import { MSG } from "@/lib/messages";
 import { parseSupabaseError } from "@/lib/supabaseError";
+import { calcStockDispo } from "@/lib/stockUtils";
 
 type ProdRow = { id: string; coffret_id: string; quantity: number };
 
@@ -591,7 +592,7 @@ function ProductionPage() {
         "Réf. composant;Nom composant;Stock physique;Stock réservé;Disponible",
       ];
       for (const c of (stockData ?? []) as any[]) {
-        const dispo = Math.max(0, Number(c.stock) - Number(c.reserved_stock ?? 0));
+        const dispo = calcStockDispo(Number(c.stock ?? 0), Number(c.reserved_stock ?? 0));
         stockLines.push(`${c.reference};${c.name};${c.stock};${c.reserved_stock ?? 0};${dispo}`);
       }
 
