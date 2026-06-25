@@ -231,11 +231,24 @@ function CoffretsPage() {
       setNewCompName("");
       setNewCompPoids("0");
     },
-    onError: (e: any) => toast.error(
-      e?.code === "23505"
-        ? `La référence "${newCompRef.trim()}" existe déjà.`
-        : e.message
-    ),
+    onError: async (e: any) => {
+      if (e?.code === "23505") {
+        // Vérifier si la référence existe à l'état archivé (soft-deleted)
+        const { data: archived } = await (supabase as any)
+          .from("composants")
+          .select("id,name,deleted_at")
+          .eq("reference", newCompRef.trim())
+          .not("deleted_at", "is", null)
+          .maybeSingle();
+        if (archived) {
+          toast.error(`La référence "${newCompRef.trim()}" existe déjà mais est archivée. Consultez le stock pour la restaurer.`);
+        } else {
+          toast.error(`La référence "${newCompRef.trim()}" existe déjà dans le stock.`);
+        }
+      } else {
+        toast.error(e.message);
+      }
+    },
   });
 
   const invalidateBom = () => {

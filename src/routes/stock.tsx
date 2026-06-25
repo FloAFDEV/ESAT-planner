@@ -257,6 +257,8 @@ function StockPage() {
                   ) : filteredRows.map((c) => {
                     const meta = stockHealthMeta[c.health];
                     const expanded = expandedId === c.id;
+                    const totalementReserve = c.stockReserve > 0 && c.stockDisponible <= 0;
+                    const partielReserve = c.stockReserve > 0 && c.stockDisponible > 0;
                     return [
                       <tr key={c.id} className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => setExpandedId(expanded ? null : c.id)}>
                         <td className="p-3 text-muted-foreground">
@@ -274,7 +276,19 @@ function StockPage() {
                           {fmtInt(c.stockDisponible)}
                         </td>
                         <td className="p-3 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
+                            {totalementReserve && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-700">
+                                Indisponible — réservé ({fmtInt(c.stockReserve)})
+                              </span>
+                            )}
+                            {partielReserve && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/10 dark:text-blue-400 dark:border-blue-800">
+                                Réservé ({fmtInt(c.stockReserve)})
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="inline-flex flex-wrap justify-end gap-1.5">
