@@ -312,7 +312,7 @@ function ProductionPage() {
     retry: 0,
     mutationFn: async () => {
       const p = urgent ? 1 : 0;
-      const key = `custom:${customLabel}:${customQty}:${p}:${Date.now()}`;
+      const key = getIdempotencyKey(`custom:${customLabel.trim()}`, customQty, p);
       const { data, error } = await sb.rpc("create_custom_production_order", {
         p_label:           customLabel.trim(),
         p_quantity:        customQty,
@@ -323,6 +323,7 @@ function ProductionPage() {
       });
       if (error) throw error;
       if (data && data.success === false) throw new Error(data.error || "Création impossible");
+      clearIdempotencyKey(`custom:${customLabel.trim()}`, customQty, p);
       if (clientOfRef.trim() && data?.order_id) {
         await sb.from("production_orders")
           .update({ client_of_reference: clientOfRef.trim() })
