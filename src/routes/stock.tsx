@@ -23,6 +23,7 @@ type StockRow = {
   reference?: string | null;
   min_stock?: number | null;
   is_active?: boolean | null;
+  deleted_at?: string | null;
   stockActuel: number;
   stockDisponible: number;
   stockReserve: number;
@@ -65,20 +66,22 @@ function StockPage() {
   const [filter, setFilter] = useState<"all" | "rupture" | "critical" | "ok">(() => (urlSearch.filterHealth as any) ?? "all");
   const [search, setSearch] = useState(() => urlSearch.filterSearch ?? "");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; reference: string; name: string; stock: number } | null>(null);
   const [deleteCode, setDeleteCode] = useState<string>("");
   const [deleteInput, setDeleteInput] = useState<string>("");
 
   const composants = useQuery({
-    queryKey: ["composants"],
+    queryKey: ["composants", showArchived],
     refetchOnMount: "always",
     refetchInterval: 10_000,
     queryFn: async () => {
-      const { data, error } = await sb
+      let q = sb
         .from("composants")
         .select("id,reference,name,stock,reserved_stock,min_stock,is_active,deleted_at")
-        .is("deleted_at", null)
         .order("reference");
+      if (!showArchived) q = q.is("deleted_at", null);
+      const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
     },
@@ -117,8 +120,11 @@ function StockPage() {
     });
   }, [composants.data]);
 
+  const activeRows  = useMemo(() => stockRows.filter((r) => !r.deleted_at), [stockRows]);
+  const archivedRows = useMemo(() => stockRows.filter((r) => !!r.deleted_at), [stockRows]);
+
   const filteredRows = useMemo<StockRow[]>(() => {
-    let rows = filter === "all" ? stockRows : stockRows.filter((r) => r.health === filter);
+    let rows = filter === "all" ? activeRows : activeRows.filter((r) => r.health === filter);
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
@@ -127,14 +133,23 @@ function StockPage() {
       );
     }
     return rows;
-  }, [filter, search, stockRows]);
+  }, [filter, search, activeRows]);
+
+  const filteredArchivedRows = useMemo<StockRow[]>(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return archivedRows;
+    return archivedRows.filter((r) =>
+      (r.reference ?? "").toLowerCase().includes(q) ||
+      (r.name ?? "").toLowerCase().includes(q)
+    );
+  }, [search, archivedRows]);
 
   const counts = useMemo(() => ({
-    all: stockRows.length,
-    rupture: stockRows.filter((r) => r.health === "rupture").length,
-    critical: stockRows.filter((r) => r.health === "critical").length,
-    ok: stockRows.filter((r) => r.health === "ok").length,
-  }), [stockRows]);
+    all: activeRows.length,
+    rupture: activeRows.filter((r) => r.health === "rupture").length,
+    critical: activeRows.filter((r) => r.health === "critical").length,
+    ok: activeRows.filter((r) => r.health === "ok").length,
+  }), [activeRows]);
 
   function exportStock() {
     if (filteredRows.length === 0) { toast.error("Aucun composant à exporter."); return; }
@@ -197,6 +212,14 @@ function StockPage() {
               {label} ({count})
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant={showArchived ? "default" : "outline"}
+            onClick={() => setShowArchived((v) => !v)}
+            className={showArchived ? "bg-muted text-foreground border border-border hover:bg-muted/80" : ""}
+          >
+            Archivés {showArchived && archivedRows.length > 0 ? `(${archivedRows.length})` : ""}
+          </Button>
           <div className="relative ml-auto w-full sm:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
@@ -242,13 +265,13 @@ function StockPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stockRows.length === 0 ? (
+                  {activeRows.length === 0 && !showArchived ? (
                     <tr>
                       <td className="p-4 text-sm text-muted-foreground text-center" colSpan={7}>
-                        Aucun composant trouvé.
+                        Aucun composant actif trouvé.
                       </td>
                     </tr>
-                  ) : filteredRows.length === 0 ? (
+                  ) : filteredRows.length === 0 && activeRows.length > 0 ? (
                     <tr>
                       <td className="p-4 text-sm text-muted-foreground text-center" colSpan={7}>
                         <Button size="sm" variant="outline" onClick={() => setFilter("all")}>Voir tous les stocks</Button>
@@ -313,6 +336,53 @@ function StockPage() {
                       ),
                     ];
                   })}
+
+                  {/* ── Section archivés ── */}
+                  {showArchived && filteredArchivedRows.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={7} className="px-3 pt-4 pb-1">
+                          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                            Archivés ({filteredArchivedRows.length})
+                          </span>
+                        </td>
+                      </tr>
+                      {filteredArchivedRows.map((c) => (
+                        <tr key={c.id} className="border-t border-dashed border-border bg-muted/10 opacity-60">
+                          <td className="p-3 text-muted-foreground">
+                            <ChevronRight className="h-4 w-4" />
+                          </td>
+                          <td className="p-3">
+                            <div className="font-mono text-xs text-muted-foreground">{c.reference}</div>
+                            <div className="font-medium line-through text-muted-foreground">{c.name}</div>
+                          </td>
+                          <td className="p-3 text-right tabular text-muted-foreground">{fmtInt(c.stockActuel)}</td>
+                          <td className="p-3 text-right tabular text-muted-foreground">—</td>
+                          <td className="p-3 text-right tabular text-muted-foreground">—</td>
+                          <td className="p-3 text-center">
+                            <div className="inline-flex flex-col items-center gap-0.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-muted text-muted-foreground border border-border">
+                                Archivé
+                              </span>
+                              {c.stockActuel === 0 && (
+                                <span className="text-[10px] text-muted-foreground">non modifiable</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 text-right text-[11px] text-muted-foreground italic">
+                            Non modifiable
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                  {showArchived && filteredArchivedRows.length === 0 && archivedRows.length === 0 && (
+                    <tr>
+                      <td className="px-3 py-2 text-xs text-muted-foreground" colSpan={7}>
+                        Aucun composant archivé.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
