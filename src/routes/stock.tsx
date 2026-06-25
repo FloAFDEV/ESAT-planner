@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { parseSupabaseError } from "@/lib/supabaseError";
 import { MSG } from "@/lib/messages";
@@ -598,6 +598,37 @@ type ComposantOption = {
   deleted_at?: string | null;
 };
 
+/** Visual status badge for a composant in the picker list */
+function CompStatusBadge({ stock, reserved }: { stock: number; reserved: number }) {
+  const dispo = calcStockDispo(stock, reserved);
+  if (dispo <= 0 && reserved > 0) {
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-medium whitespace-nowrap">
+        Indisponible
+      </span>
+    );
+  }
+  if (reserved > 0) {
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-700 font-medium whitespace-nowrap">
+        Réservé {fmtInt(reserved)}
+      </span>
+    );
+  }
+  if (stock === 0) {
+    return (
+      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border font-medium whitespace-nowrap">
+        Vide
+      </span>
+    );
+  }
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20 font-medium whitespace-nowrap">
+      OK
+    </span>
+  );
+}
+
 function MouvementDialog({
   composants,
   open,
@@ -614,40 +645,131 @@ function MouvementDialog({
   presetReason?: string;
 }) {
   const [composantId, setComposantId] = useState<string>("");
-  const [compSearch, setCompSearch] = useState<string>("");
+  const [rawSearch, setRawSearch] = useState<string>("");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
+  const [highlightIdx, setHighlightIdx] = useState<number>(0);
   const [type, setType] = useState<"IN" | "OUT" | "ADJUST">("IN");
   const [qty, setQty] = useState<string>("");
   const [reason, setReason] = useState<string>("");
   const qc = useQueryClient();
 
+  const searchRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounce raw search into debouncedSearch
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(rawSearch), 120);
+    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+  }, [rawSearch]);
+
   useEffect(() => {
     if (!open) return;
     setComposantId(presetComponentId ?? "");
-    setCompSearch("");
+    setRawSearch("");
+    setDebouncedSearch("");
+    setHighlightIdx(0);
     setType(presetType ?? "IN");
     setReason(presetReason ?? "");
     setQty("");
   }, [open, presetComponentId, presetType, presetReason]);
+
+  // Autofocus: search when no preset, qty when composant already set
+  useEffect(() => {
+    if (!open) return;
+    const id = setTimeout(() => {
+      if (presetComponentId) qtyRef.current?.focus();
+      else searchRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(id);
+  }, [open, presetComponentId]);
+
+  // Focus qty after composant selection
+  useEffect(() => {
+    if (composantId) {
+      setTimeout(() => qtyRef.current?.focus(), 30);
+    }
+  }, [composantId]);
 
   const activeComposants = useMemo(
     () => composants.filter((c) => !c.deleted_at),
     [composants]
   );
 
+  // Quick-entry mode: "REF QTY" e.g. "ASBNEP1101 5" → auto-select + fill qty
+  const quickMatch = useMemo(() => {
+    const m = debouncedSearch.match(/^([^\s]+)\s+(\d+)$/);
+    if (!m) return null;
+    const ref = m[1].toUpperCase();
+    const q = parseInt(m[2], 10);
+    const comp = activeComposants.find((c) => (c.reference ?? "").toUpperCase() === ref);
+    return comp && q > 0 ? { comp, qty: q } : null;
+  }, [debouncedSearch, activeComposants]);
+
   const filteredComposants = useMemo(() => {
-    const q = compSearch.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return activeComposants;
     return activeComposants.filter(
       (c) =>
         (c.reference ?? "").toLowerCase().includes(q) ||
         (c.name ?? "").toLowerCase().includes(q)
     );
-  }, [compSearch, activeComposants]);
+  }, [debouncedSearch, activeComposants]);
+
+  // Reset highlight when list changes
+  useEffect(() => { setHighlightIdx(0); }, [filteredComposants]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const item = list.querySelector<HTMLElement>(`[data-idx="${highlightIdx}"]`);
+    item?.scrollIntoView({ block: "nearest" });
+  }, [highlightIdx]);
 
   const selectedComp = useMemo(
     () => activeComposants.find((c) => c.id === composantId) ?? null,
     [composantId, activeComposants]
   );
+
+  function selectComp(id: string) {
+    setComposantId(id);
+    setRawSearch("");
+    setDebouncedSearch("");
+  }
+
+  function clearComp() {
+    setComposantId("");
+    setRawSearch("");
+    setDebouncedSearch("");
+    setHighlightIdx(0);
+    setTimeout(() => searchRef.current?.focus(), 30);
+  }
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (quickMatch) {
+      if (e.key === "Enter") {
+        selectComp(quickMatch.comp.id);
+        setQty(String(quickMatch.qty));
+        return;
+      }
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.min(i + 1, filteredComposants.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const target = filteredComposants[highlightIdx];
+      if (target) selectComp(target.id);
+    } else if (e.key === "Escape") {
+      onOpenChange(false);
+    }
+  }
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -672,84 +794,130 @@ function MouvementDialog({
   });
 
   const typeLabel = type === "IN" ? "Entrée" : type === "OUT" ? "Sortie" : "Ajustement";
+  const typeColor = type === "IN"
+    ? "bg-success text-success-foreground hover:bg-success/90"
+    : type === "OUT"
+    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+    : "";
+
+  const selStock = selectedComp?.stock ?? 0;
+  const selReserved = Math.max(0, selectedComp?.reserved_stock ?? 0);
+  const selDispo = calcStockDispo(selStock, selReserved);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{typeLabel} de stock</DialogTitle>
+      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
+        {/* ── Header ── */}
+        <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
+          <DialogTitle className="text-base">{typeLabel} de stock</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          {/* Composant search + selection */}
-          <div className="space-y-2">
-            <Label>Composant</Label>
+
+        <div className="px-5 pt-4 pb-5 space-y-5">
+
+          {/* ── BLOC 1 : sélection composant (primaire) ── */}
+          <div>
             {selectedComp ? (
-              <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-                <div className="min-w-0">
-                  <span className="font-mono text-xs text-muted-foreground">{selectedComp.reference}</span>
-                  <span className="ml-2 text-sm font-medium">{selectedComp.name}</span>
+              /* Selected state — compact info card */
+              <div className="rounded-lg border-2 border-primary/20 bg-primary/5 px-4 py-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs text-muted-foreground">{selectedComp.reference}</div>
+                    <div className="font-semibold text-base leading-tight mt-0.5">{selectedComp.name}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearComp}
+                    className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    aria-label="Changer de composant"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setComposantId(""); setCompSearch(""); }}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                  aria-label="Désélectionner"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>Stock : <strong className="text-foreground tabular">{fmtInt(selStock)}</strong></span>
+                  {selReserved > 0 && <span>Réservé : <strong className="text-blue-600 tabular">{fmtInt(selReserved)}</strong></span>}
+                  <span>Disponible : <strong className={`tabular ${selDispo <= 0 ? "text-destructive" : "text-success"}`}>{fmtInt(selDispo)}</strong></span>
+                  <CompStatusBadge stock={selStock} reserved={selReserved} />
+                </div>
               </div>
             ) : (
-              <div className="rounded-md border border-border">
-                <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              /* Search state */
+              <div className="rounded-lg border-2 border-border focus-within:border-primary/50 transition-colors bg-background">
+                {/* Search input */}
+                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                  <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <input
+                    ref={searchRef}
                     type="text"
-                    value={compSearch}
-                    onChange={(e) => setCompSearch(e.target.value)}
+                    value={rawSearch}
+                    onChange={(e) => setRawSearch(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
                     placeholder="Référence ou désignation…"
                     className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                    autoFocus
+                    autoComplete="off"
+                    spellCheck={false}
                   />
-                  {compSearch && (
-                    <button type="button" onClick={() => setCompSearch("")} className="text-muted-foreground hover:text-foreground">
+                  {rawSearch && (
+                    <button
+                      type="button"
+                      onClick={() => { setRawSearch(""); setDebouncedSearch(""); }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </div>
-                <div className="max-h-48 overflow-y-auto">
+
+                {/* Quick-entry hint / match */}
+                {quickMatch ? (
+                  <div className="px-3 py-2 border-t border-border bg-primary/5 flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-mono text-xs text-muted-foreground mr-1.5">{quickMatch.comp.reference}</span>
+                      <span className="font-medium">{quickMatch.comp.name}</span>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="font-semibold tabular">× {quickMatch.qty}</span>
+                      <span className="text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5">↵ Entrée</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-3 pb-1 border-t border-border/40">
+                    <p className="text-[10px] text-muted-foreground py-1">
+                      Saisie rapide : <span className="font-mono">REF QUANTITÉ</span> — ex : <span className="font-mono">ASBN123 5</span> puis ↵
+                    </p>
+                  </div>
+                )}
+
+                {/* Results list */}
+                <div ref={listRef} className="max-h-52 overflow-y-auto border-t border-border/60 divide-y divide-border/40">
                   {filteredComposants.length === 0 ? (
                     <p className="p-3 text-xs text-muted-foreground text-center">Aucun résultat</p>
-                  ) : filteredComposants.map((c) => {
+                  ) : filteredComposants.map((c, i) => {
                     const stock = c.stock ?? 0;
                     const reserved = Math.max(0, c.reserved_stock ?? 0);
                     const dispo = calcStockDispo(stock, reserved);
-                    const isZero = stock === 0;
-                    const isReserved = reserved > 0;
+                    const isHighlighted = i === highlightIdx;
                     return (
                       <button
                         key={c.id}
+                        data-idx={i}
                         type="button"
-                        onClick={() => setComposantId(c.id)}
-                        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/50 border-b border-border/40 last:border-0"
+                        onMouseEnter={() => setHighlightIdx(i)}
+                        onClick={() => selectComp(c.id)}
+                        className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors ${isHighlighted ? "bg-primary/10" : "hover:bg-muted/40"}`}
                       >
-                        <div className="min-w-0">
-                          <span className="font-mono text-xs text-muted-foreground">{c.reference}</span>
-                          <span className="ml-2 text-sm">{c.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-1.5 min-w-0">
+                            <span className="font-mono text-xs text-muted-foreground shrink-0">{c.reference}</span>
+                            <span className="text-sm truncate">{c.name}</span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5">
+                            Stock : {fmtInt(stock)}{reserved > 0 ? ` · Réservé : ${fmtInt(reserved)}` : ""}
+                          </div>
                         </div>
-                        <div className="shrink-0 flex items-center gap-1.5">
-                          {isZero && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-medium">
-                              Vide
-                            </span>
-                          )}
-                          {isReserved && !isZero && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-700 font-medium">
-                              Réservé {fmtInt(reserved)}
-                            </span>
-                          )}
-                          <span className="text-xs tabular text-muted-foreground font-mono">
-                            {fmtInt(dispo)}
-                          </span>
+                        <div className="shrink-0 flex items-center gap-2">
+                          <span className="text-sm font-semibold tabular">{fmtInt(dispo)}</span>
+                          <CompStatusBadge stock={stock} reserved={reserved} />
                         </div>
                       </button>
                     );
@@ -759,31 +927,64 @@ function MouvementDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Type de mouvement</Label>
-              <Select value={type} onValueChange={(v) => setType(v as "IN" | "OUT" | "ADJUST")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="IN">Entrée (+) — réapprovisionnement</SelectItem>
-                  <SelectItem value="OUT">Sortie (−) — perte, casse</SelectItem>
-                  <SelectItem value="ADJUST">Inventaire — fixe le stock à cette valeur</SelectItem>
-                </SelectContent>
-              </Select>
+          {/* ── BLOC 2 : champs secondaires (visible seulement si composant sélectionné) ── */}
+          {selectedComp && (
+            <div className="space-y-4">
+              {/* Type + quantité */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Type de mouvement</Label>
+                  <Select value={type} onValueChange={(v) => setType(v as "IN" | "OUT" | "ADJUST")}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="IN">Entrée (+)</SelectItem>
+                      <SelectItem value="OUT">Sortie (−)</SelectItem>
+                      <SelectItem value="ADJUST">Inventaire</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Quantité</Label>
+                  <Input
+                    ref={qtyRef}
+                    type="number"
+                    min="1"
+                    value={qty}
+                    onChange={(e) => setQty(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && qty) mut.mutate(); }}
+                    className="h-9"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              {/* Motif */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">
+                  Motif <span className="text-muted-foreground/60">(optionnel)</span>
+                </Label>
+                <Input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && qty) mut.mutate(); }}
+                  placeholder="Réception fournisseur, casse, inventaire…"
+                  className="h-9"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Quantité</Label>
-              <Input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Motif <span className="text-muted-foreground text-xs">(optionnel)</span></Label>
-            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex : Réception fournisseur, casse, inventaire…" />
-          </div>
+          )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>Enregistrer</Button>
+
+        {/* ── Footer ── */}
+        <DialogFooter className="px-5 py-3 border-t border-border bg-muted/20 flex gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">Annuler</Button>
+          <Button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !composantId || !qty}
+            className={`h-9 flex-1 ${typeColor}`}
+          >
+            {mut.isPending ? "Enregistrement…" : `Enregistrer ${typeLabel.toLowerCase()}`}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
