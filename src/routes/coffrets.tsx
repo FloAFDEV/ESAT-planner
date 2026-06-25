@@ -169,7 +169,11 @@ function CoffretsPage() {
       setNewCoffretName("");
       setSelectedId(id);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(
+      e?.code === "23505"
+        ? `La référence "${newCoffretRef.trim()}" existe déjà.`
+        : e.message
+    ),
   });
 
   const saveCoffret = useMutation({
@@ -226,7 +230,11 @@ function CoffretsPage() {
       setNewCompName("");
       setNewCompPoids("0");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => toast.error(
+      e?.code === "23505"
+        ? `La référence "${newCompRef.trim()}" existe déjà.`
+        : e.message
+    ),
   });
 
   const invalidateBom = () => {
