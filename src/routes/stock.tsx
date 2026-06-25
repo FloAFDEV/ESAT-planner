@@ -589,6 +589,15 @@ function ComponentDetail({ composantId, composantName }: { composantId: string; 
   );
 }
 
+type ComposantOption = {
+  id: string;
+  reference: string;
+  name: string;
+  stock?: number;
+  reserved_stock?: number;
+  deleted_at?: string | null;
+};
+
 function MouvementDialog({
   composants,
   open,
@@ -597,7 +606,7 @@ function MouvementDialog({
   presetType,
   presetReason,
 }: {
-  composants: { id: string; reference: string; name: string }[];
+  composants: ComposantOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   presetComponentId?: string;
@@ -605,6 +614,7 @@ function MouvementDialog({
   presetReason?: string;
 }) {
   const [composantId, setComposantId] = useState<string>("");
+  const [compSearch, setCompSearch] = useState<string>("");
   const [type, setType] = useState<"IN" | "OUT" | "ADJUST">("IN");
   const [qty, setQty] = useState<string>("");
   const [reason, setReason] = useState<string>("");
@@ -613,10 +623,31 @@ function MouvementDialog({
   useEffect(() => {
     if (!open) return;
     setComposantId(presetComponentId ?? "");
+    setCompSearch("");
     setType(presetType ?? "IN");
     setReason(presetReason ?? "");
     setQty("");
   }, [open, presetComponentId, presetType, presetReason]);
+
+  const activeComposants = useMemo(
+    () => composants.filter((c) => !c.deleted_at),
+    [composants]
+  );
+
+  const filteredComposants = useMemo(() => {
+    const q = compSearch.trim().toLowerCase();
+    if (!q) return activeComposants;
+    return activeComposants.filter(
+      (c) =>
+        (c.reference ?? "").toLowerCase().includes(q) ||
+        (c.name ?? "").toLowerCase().includes(q)
+    );
+  }, [compSearch, activeComposants]);
+
+  const selectedComp = useMemo(
+    () => activeComposants.find((c) => c.id === composantId) ?? null,
+    [composantId, activeComposants]
+  );
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -644,24 +675,90 @@ function MouvementDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{typeLabel} de stock</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {/* Composant search + selection */}
           <div className="space-y-2">
             <Label>Composant</Label>
-            <Select value={composantId} onValueChange={setComposantId}>
-              <SelectTrigger><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
-              <SelectContent>
-                {composants.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <span className="font-mono text-xs mr-2">{c.reference}</span>{c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {selectedComp ? (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <div className="min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground">{selectedComp.reference}</span>
+                  <span className="ml-2 text-sm font-medium">{selectedComp.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setComposantId(""); setCompSearch(""); }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label="Désélectionner"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-md border border-border">
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={compSearch}
+                    onChange={(e) => setCompSearch(e.target.value)}
+                    placeholder="Référence ou désignation…"
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    autoFocus
+                  />
+                  {compSearch && (
+                    <button type="button" onClick={() => setCompSearch("")} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {filteredComposants.length === 0 ? (
+                    <p className="p-3 text-xs text-muted-foreground text-center">Aucun résultat</p>
+                  ) : filteredComposants.map((c) => {
+                    const stock = c.stock ?? 0;
+                    const reserved = Math.max(0, c.reserved_stock ?? 0);
+                    const dispo = calcStockDispo(stock, reserved);
+                    const isZero = stock === 0;
+                    const isReserved = reserved > 0;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setComposantId(c.id)}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/50 border-b border-border/40 last:border-0"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-mono text-xs text-muted-foreground">{c.reference}</span>
+                          <span className="ml-2 text-sm">{c.name}</span>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          {isZero && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-medium">
+                              Vide
+                            </span>
+                          )}
+                          {isReserved && !isZero && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-700 font-medium">
+                              Réservé {fmtInt(reserved)}
+                            </span>
+                          )}
+                          <span className="text-xs tabular text-muted-foreground font-mono">
+                            {fmtInt(dispo)}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Type de mouvement</Label>
