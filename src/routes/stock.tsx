@@ -16,6 +16,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, FileDown, Info, Search, 
 import { fmtDateTime, fmtInt } from "@/lib/format";
 import { record_stock_movement } from "@/lib/stockMovements";
 import { getStockHealth, normalizeProductionStatus, productionStatusMeta, stockHealthMeta, type StockHealth } from "@/lib/domain";
+import { calcStockDispo, hasStockInconsistency } from "@/lib/stockUtils";
 
 type StockRow = {
   id: string;
@@ -114,7 +115,7 @@ function StockPage() {
     return (composants.data ?? []).map((c: any) => {
       const stockActuel = Number(c.stock ?? 0);
       const stockReserve = Math.max(0, Number(c.reserved_stock ?? 0));
-      const stockDisponible = stockActuel - stockReserve;
+      const stockDisponible = calcStockDispo(stockActuel, stockReserve);
       const health = getStockHealth(stockDisponible, Number(c.min_stock ?? 0));
       return { ...c, stockActuel, stockDisponible, stockReserve, health };
     });
@@ -282,6 +283,7 @@ function StockPage() {
                     const expanded = expandedId === c.id;
                     const totalementReserve = c.stockReserve > 0 && c.stockDisponible <= 0;
                     const partielReserve = c.stockReserve > 0 && c.stockDisponible > 0;
+                    const incoherence = hasStockInconsistency(c.stockActuel, c.stockReserve);
                     return [
                       <tr key={c.id} className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => setExpandedId(expanded ? null : c.id)}>
                         <td className="p-3 text-muted-foreground">
@@ -300,13 +302,18 @@ function StockPage() {
                         </td>
                         <td className="p-3 text-center">
                           <div className="inline-flex flex-col items-center gap-0.5">
+                            {incoherence && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-destructive/15 text-destructive border border-destructive/30">
+                                ⚠ Incohérence stock
+                              </span>
+                            )}
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
-                            {totalementReserve && (
+                            {totalementReserve && !incoherence && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-300 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-700">
                                 Indisponible — réservé ({fmtInt(c.stockReserve)})
                               </span>
                             )}
-                            {partielReserve && (
+                            {partielReserve && !incoherence && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-900/10 dark:text-blue-400 dark:border-blue-800">
                                 Réservé ({fmtInt(c.stockReserve)})
                               </span>
