@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MSG } from "@/lib/messages";
+import { parseSupabaseError } from "@/lib/supabaseError";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -192,7 +193,7 @@ function CoffretsPage() {
       toast.success(MSG.COFFRET_UPDATED);
       qc.invalidateQueries({ queryKey: ["coffrets"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const deleteCoffret = useMutation({
@@ -208,7 +209,7 @@ function CoffretsPage() {
       setSelectedId("");
       setDeleteConfirmOpen(false);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const createComposant = useMutation({
@@ -259,7 +260,7 @@ function CoffretsPage() {
       setNewCompQty("1");
       invalidateBom();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const updateBomLine = useMutation({
@@ -268,7 +269,7 @@ function CoffretsPage() {
       if (error) throw error;
     },
     onSuccess: () => invalidateBom(),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const deleteBomLine = useMutation({
@@ -280,7 +281,7 @@ function CoffretsPage() {
       toast.success(MSG.COMPOSANT_REMOVED);
       invalidateBom();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const feasibilityQuantity = Math.max(0, Number(feasibilityQty || 0));

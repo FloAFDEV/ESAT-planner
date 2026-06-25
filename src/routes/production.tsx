@@ -19,6 +19,7 @@ import { normalizeProductionStatus, productionStatusMeta } from "@/lib/domain";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProductionFeasibility } from "@/lib/getProductionFeasibility";
 import { MSG } from "@/lib/messages";
+import { parseSupabaseError } from "@/lib/supabaseError";
 
 type ProdRow = { id: string; coffret_id: string; quantity: number };
 
@@ -340,7 +341,7 @@ function ProductionPage() {
       setClientOfRef("");
       setOfNotes("");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const createFabrication = useMutation({
@@ -381,7 +382,7 @@ function ProductionPage() {
       setOfNotes("");
       setOfType("coffret");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const transition = useMutation({
@@ -416,7 +417,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["reservations_by_of"] });
       qc.invalidateQueries({ queryKey: ["composant_reservations"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const cancelOrder = useMutation({
@@ -436,7 +437,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["reservations_by_of"] });
       qc.invalidateQueries({ queryKey: ["composant_reservations"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const deleteOrder = useMutation({
@@ -454,7 +455,7 @@ function ProductionPage() {
       setDeleteOfTarget(null);
       setDeleteOfInput("");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   function openDeleteOfDialog(o: { id: string; reference?: string; coffret?: { name?: string } | null; coffret_snapshot?: { name?: string } | null }) {
@@ -526,7 +527,7 @@ function ProductionPage() {
       setArchiveInput("");
       setArchiveOpenedAt(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   async function generateArchiveCsv() {
@@ -663,7 +664,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["composant_movements"] });
       setValidateTarget(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   function exportOFActifs() {
