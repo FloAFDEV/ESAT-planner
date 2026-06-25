@@ -2,6 +2,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { parseSupabaseError } from "@/lib/supabaseError";
 import { MSG } from "@/lib/messages";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,7 +97,7 @@ function StockPage() {
       setDeleteTarget(null);
       setDeleteInput("");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   function openDeleteDialog(c: StockRow) {
@@ -551,7 +552,7 @@ function MouvementDialog({
       qc.invalidateQueries({ queryKey: ["composant_movements"] });
       onOpenChange(false);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const typeLabel = type === "IN" ? "Entrée" : type === "OUT" ? "Sortie" : "Ajustement";

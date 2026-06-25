@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { parseSupabaseError } from "@/lib/supabaseError";
 import { MSG } from "@/lib/messages";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,7 +161,7 @@ function ClientsPage() {
       setEditOpen(false);
       setSelectedId(id);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const deleteClient = useMutation({
@@ -174,7 +175,7 @@ function ClientsPage() {
       setSelectedId(null);
       setDeleteId(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   // ─── CSV export ─────────────────────────────────────────────────────────────

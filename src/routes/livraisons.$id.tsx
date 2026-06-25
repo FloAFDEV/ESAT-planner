@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ArrowLeft, Phone, Mail, MapPin, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { parseSupabaseError } from "@/lib/supabaseError";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
@@ -141,7 +142,7 @@ function LivraisonDetail() {
       qc.invalidateQueries({ queryKey: ["shipment", id] });
       qc.invalidateQueries({ queryKey: ["shipments"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const deletePallet = useMutation({
@@ -154,7 +155,7 @@ function LivraisonDetail() {
       qc.invalidateQueries({ queryKey: ["shipment", id] });
       qc.invalidateQueries({ queryKey: ["shipments"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const status = String(data?.status ?? "");
@@ -533,7 +534,7 @@ function AddPalletDialog({
       }).eq("id", shipmentId);
     },
     onSuccess,
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   return (

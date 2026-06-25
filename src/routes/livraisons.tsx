@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { parseSupabaseError } from "@/lib/supabaseError";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,7 @@ function LivraisonsPage() {
       toast.success(MSG.SHIPMENT_DELETED);
       setDeleteId(null);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const transitionShipment = useMutation({
@@ -71,7 +72,7 @@ function LivraisonsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["shipments"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   const clientsList = useQuery({
@@ -594,7 +595,7 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
       qc.invalidateQueries({ queryKey: ["shipments"] });
       onClose();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   return (
@@ -953,7 +954,7 @@ function NewShipmentDialog() {
       setOpen(false);
       reset();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(parseSupabaseError(e)),
   });
 
   return (
