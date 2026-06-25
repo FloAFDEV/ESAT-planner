@@ -47,7 +47,8 @@ export async function getProductionFeasibility(
   const { data: bomRows, error: bomError } = await sb
     .from("nomenclatures")
     .select("composant_id,quantity")
-    .eq("coffret_id", coffretId);
+    .eq("coffret_id", coffretId)
+    .eq("is_active", true);
   if (bomError) throw bomError;
 
   const neededByComposant = new Map<string, number>();
@@ -61,7 +62,7 @@ export async function getProductionFeasibility(
 
   // Read stock + real-time reservations in parallel for conservative available calculation
   const [composantResult, reservationsResult] = await Promise.all([
-    sb.from("composants").select("id,reference,name,stock,reserved_stock").in("id", composantIds),
+    sb.from("composants").select("id,reference,name,stock,reserved_stock").in("id", composantIds).is("deleted_at", null),
     sb.from("stock_reservations").select("composant_id,quantity").eq("status", "active").in("composant_id", composantIds),
   ]);
   if (composantResult.error) throw composantResult.error;

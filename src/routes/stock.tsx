@@ -979,7 +979,7 @@ function MouvementDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9">Annuler</Button>
           <Button
             onClick={() => mut.mutate()}
-            disabled={mut.isPending || !composantId || !qty}
+            disabled={mut.isPending || !composantId || parseInt(qty || "0", 10) <= 0}
             className={`h-9 flex-1 ${typeColor}`}
           >
             {mut.isPending ? "Enregistrement…" : `Enregistrer ${typeLabel.toLowerCase()}`}
