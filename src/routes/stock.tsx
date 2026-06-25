@@ -897,6 +897,11 @@ function MouvementDialog({
                     const reserved = Math.max(0, c.reserved_stock ?? 0);
                     const dispo = calcStockDispo(stock, reserved);
                     const isHighlighted = i === highlightIdx;
+                    const stockColor = dispo === 0
+                      ? "text-destructive"
+                      : dispo <= 5
+                      ? "text-warning"
+                      : "text-success";
                     return (
                       <button
                         key={c.id}
@@ -904,20 +909,14 @@ function MouvementDialog({
                         type="button"
                         onMouseEnter={() => setHighlightIdx(i)}
                         onClick={() => selectComp(c.id)}
-                        className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors ${isHighlighted ? "bg-primary/10" : "hover:bg-muted/40"}`}
+                        className={`w-full px-3 py-2 text-left transition-colors ${isHighlighted ? "bg-primary/10" : "hover:bg-muted/40"}`}
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline gap-1.5 min-w-0">
-                            <span className="font-mono text-xs text-muted-foreground shrink-0">{c.reference}</span>
-                            <span className="text-sm truncate">{c.name}</span>
-                          </div>
-                          <div className="text-[11px] text-muted-foreground mt-0.5">
-                            Stock : {fmtInt(stock)}{reserved > 0 ? ` · Réservé : ${fmtInt(reserved)}` : ""}
-                          </div>
+                        <div className="flex items-baseline gap-1.5 min-w-0">
+                          <span className="font-mono text-xs font-semibold shrink-0">{c.reference}</span>
+                          <span className="text-sm text-muted-foreground truncate">{c.name}</span>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="text-sm font-semibold tabular">{fmtInt(dispo)}</span>
-                          <CompStatusBadge stock={stock} reserved={reserved} />
+                        <div className={`text-[11px] mt-0.5 ${stockColor}`}>
+                          Stock : {fmtInt(stock)}{reserved > 0 ? ` · Réservé : ${fmtInt(reserved)}` : ""}
                         </div>
                       </button>
                     );
