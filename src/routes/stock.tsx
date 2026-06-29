@@ -788,6 +788,7 @@ function MouvementDialog({
       toast.success(MSG.STOCK_MOVEMENT_SAVED);
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["composant_movements"] });
+      qc.invalidateQueries({ queryKey: ["deficit_checks"] });
       onOpenChange(false);
     },
     onError: (e: unknown) => toast.error(parseSupabaseError(e)),

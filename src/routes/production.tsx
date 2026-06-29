@@ -307,7 +307,7 @@ function ProductionPage() {
       return new Map(results.map((r) => [r.orderId, r.feasibility]));
     },
     enabled: pendingMaterialOrders.length > 0,
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
 
   const createCustom = useMutation({
@@ -663,6 +663,7 @@ function ProductionPage() {
       qc.invalidateQueries({ queryKey: ["composants"] });
       qc.invalidateQueries({ queryKey: ["stock_movements"] });
       qc.invalidateQueries({ queryKey: ["composant_movements"] });
+      qc.invalidateQueries({ queryKey: ["deficit_checks"] });
       setValidateTarget(null);
     },
     onError: (e: unknown) => toast.error(parseSupabaseError(e)),

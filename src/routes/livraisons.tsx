@@ -187,6 +187,7 @@ function LivraisonsPage() {
       rows = rows.filter((s) =>
         (s.client_entity?.name  ?? "").toLowerCase().includes(q) ||
         (s.reference            ?? "").toLowerCase().includes(q) ||
+        (s.bl_number            ?? "").toLowerCase().includes(q) ||
         (s.client_entity?.city  ?? "").toLowerCase().includes(q) ||
         (s.client_entity?.address ?? "").toLowerCase().includes(q) ||
         String(s.total_weight   ?? "").includes(q)
@@ -194,6 +195,29 @@ function LivraisonsPage() {
     }
     return rows;
   }, [shipments.data, shipSearch, shipStatus, dateFrom, dateTo]);
+
+  // Groupe les expéditions par bl_number. Les expéditions sans BL restent isolées.
+  const groupedShipments = useMemo(() => {
+    const groups: Array<{ blNumber: string | null; shipments: any[] }> = [];
+    const byBl = new Map<string, any[]>();
+    for (const s of filteredShipments) {
+      const bl = s.bl_number?.trim() || null;
+      if (!bl) {
+        groups.push({ blNumber: null, shipments: [s] });
+      } else {
+        if (!byBl.has(bl)) byBl.set(bl, []);
+        byBl.get(bl)!.push(s);
+      }
+    }
+    for (const [bl, items] of byBl) {
+      groups.push({ blNumber: bl, shipments: items });
+    }
+    return groups.sort((a, b) => {
+      const dateA = a.shipments[0]?.created_at ?? "";
+      const dateB = b.shipments[0]?.created_at ?? "";
+      return dateB.localeCompare(dateA);
+    });
+  }, [filteredShipments]);
 
   const activeFilters = (shipStatus !== "all" ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (shipSearch.trim() ? 1 : 0);
 
@@ -319,107 +343,24 @@ function LivraisonsPage() {
         {filteredShipments.length === 0 && (shipments.data ?? []).length > 0 && (
           <Card><CardContent className="py-8 text-center text-muted-foreground text-sm">Aucune expédition ne correspond aux filtres.</CardContent></Card>
         )}
-        {filteredShipments.map((s: any) => {
-          const status = String(s.status);
-          const canPrepare = status === "draft";
-          const canLoad = status === "ready";
-          const canShip = status === "shipped";
-          return (
-            <Card key={s.id}>
-              <CardHeader className="flex-row items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-info" />
-                    <ClientPopover client={s.client_entity} shipmentDate={s.created_at} shipmentStatus={s.status} />
-                  </CardTitle>
-                  <div className="mt-1 space-y-0.5">
-                    {s.client_of_reference && (
-                      <div className="font-mono text-sm font-semibold text-foreground">{s.client_of_reference}</div>
-                    )}
-                    <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="font-mono">{s.reference ?? s.id}</span>
-                      {s.bl_number && (
-                        <span className="inline-flex items-center gap-1 font-mono bg-info/10 text-info border border-info/20 rounded px-1.5 py-0">
-                          BL {s.bl_number}
-                        </span>
-                      )}
-                      <span>{fmtDate(s.created_at)}</span>
-                    </div>
-                  </div>
-                  <div className="mt-1">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${livraisonStatusMeta[status ?? ""]?.cls ?? "bg-muted text-muted-foreground"}`}>
-                      {livraisonStatusMeta[status ?? ""]?.label ?? String(s.status ?? "")}
-                    </span>
-                  </div>
+        {groupedShipments.map((group) => {
+          if (group.blNumber) {
+            const totalWeight = group.shipments.reduce((sum, s) => sum + Number(s.total_weight ?? 0), 0);
+            const totalPallets = group.shipments.reduce((sum, s) => sum + Number(s.total_pallets ?? 0), 0);
+            return (
+              <div key={`bl-${group.blNumber}`} className="rounded-lg border border-info/30 bg-info/5">
+                <div className="px-4 py-2.5 flex items-center gap-3 border-b border-info/20">
+                  <span className="font-mono font-semibold text-sm text-info">BL {group.blNumber}</span>
+                  <span className="text-xs text-muted-foreground">{group.shipments.length} expédition{group.shipments.length > 1 ? "s" : ""}</span>
+                  <span className="text-xs text-muted-foreground ml-auto">{fmtKg(totalWeight)} · {totalPallets} palette{totalPallets > 1 ? "s" : ""}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  {status !== "shipped" && status !== "delivered" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setEditShipment(s)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive hover:bg-destructive/10"
-                    onClick={() => setDeleteId(s.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                <div className="grid gap-3 p-3">
+                  {group.shipments.map((s: any) => <ShipmentCard key={s.id} s={s} onEdit={setEditShipment} onDelete={setDeleteId} onPalettes={setPalettesShipment} transitionShipment={transitionShipment} />)}
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="w-full sm:w-auto gap-1.5"
-                    onClick={() => setPalettesShipment(s)}
-                  >
-                    <Layers className="h-3.5 w-3.5" />
-                    Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
-                  </Button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs md:text-sm">
-                    <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 backdrop-blur text-xs uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th className="text-left p-1.5 md:p-2">Variant</th>
-                        <th className="text-right p-1.5 md:p-2">Quantité</th>
-                        <th className="text-right p-1.5 md:p-2">Poids ligne</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(s.lines ?? []).map((it: any) => (
-                        <tr key={it.id} className="border-t border-border">
-                          <td className="p-1.5 md:p-2">
-                            <div className="font-medium">{it.variant?.name ?? "Données manquantes"}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
-                          </td>
-                          <td className="p-1.5 md:p-2 text-right tabular">{fmtInt(it.quantity)}</td>
-                          <td className="p-1.5 md:p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
-                        </tr>
-                      ))}
-                      <tr className="border-t-2 border-border bg-muted/30 font-semibold">
-                        <td className="p-1.5 md:p-2">Total</td>
-                        <td className="p-1.5 md:p-2 text-right tabular">
-                          {fmtInt((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.quantity ?? 0), 0))} u.
-                        </td>
-                        <td className="p-1.5 md:p-2 text-right tabular">{fmtKg((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.displayWeight ?? 0), 0))}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          );
+              </div>
+            );
+          }
+          return <ShipmentCard key={group.shipments[0].id} s={group.shipments[0]} onEdit={setEditShipment} onDelete={setDeleteId} onPalettes={setPalettesShipment} transitionShipment={transitionShipment} />;
         })}
       </div>
 
@@ -456,6 +397,102 @@ function LivraisonsPage() {
         />
       )}
     </div>
+  );
+}
+
+
+function ShipmentCard({ s, onEdit, onDelete, onPalettes, transitionShipment }: {
+  s: any;
+  onEdit: (s: any) => void;
+  onDelete: (id: string) => void;
+  onPalettes: (s: any) => void;
+  transitionShipment: { isPending: boolean; mutate: (args: { id: string; status: string }) => void };
+}) {
+  const status = String(s.status);
+  const canPrepare = status === "draft";
+  const canLoad = status === "ready";
+  const canShip = status === "shipped";
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-3">
+        <div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Truck className="h-4 w-4 text-info" />
+            <ClientPopover client={s.client_entity} shipmentDate={s.created_at} shipmentStatus={s.status} />
+          </CardTitle>
+          <div className="mt-1 space-y-0.5">
+            {s.client_of_reference && (
+              <div className="font-mono text-sm font-semibold text-foreground">{s.client_of_reference}</div>
+            )}
+            <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="font-mono">{s.reference ?? s.id}</span>
+              {s.bl_number && (
+                <span className="inline-flex items-center gap-1 font-mono bg-info/10 text-info border border-info/20 rounded px-1.5 py-0">
+                  BL {s.bl_number}
+                </span>
+              )}
+              <span>{fmtDate(s.created_at)}</span>
+            </div>
+          </div>
+          <div className="mt-1">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${livraisonStatusMeta[status ?? ""]?.cls ?? "bg-muted text-muted-foreground"}`}>
+              {livraisonStatusMeta[status ?? ""]?.label ?? String(s.status ?? "")}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {status !== "shipped" && status !== "delivered" && (
+            <Button variant="ghost" size="icon" onClick={() => onEdit(s)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => onDelete(s.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canPrepare || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "ready" })}>Préparer</Button>
+          <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canLoad || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "shipped" })}>Expédier</Button>
+          <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={!canShip || transitionShipment.isPending} onClick={() => transitionShipment.mutate({ id: s.id, status: "delivered" })}>Livrer</Button>
+          <Button size="sm" variant="secondary" className="w-full sm:w-auto gap-1.5" onClick={() => onPalettes(s)}>
+            <Layers className="h-3.5 w-3.5" />
+            Palettes{s.pallet_count > 0 ? ` (${s.pallet_count})` : ""}
+          </Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs md:text-sm">
+            <thead className="sticky top-[88px] md:top-0 z-10 bg-muted/95 backdrop-blur text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left p-1.5 md:p-2">Variant</th>
+                <th className="text-right p-1.5 md:p-2">Quantité</th>
+                <th className="text-right p-1.5 md:p-2">Poids ligne</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(s.lines ?? []).map((it: any) => (
+                <tr key={it.id} className="border-t border-border">
+                  <td className="p-1.5 md:p-2">
+                    <div className="font-medium">{it.variant?.name ?? "Données manquantes"}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{it.variant?.reference ?? "Données manquantes"}</div>
+                  </td>
+                  <td className="p-1.5 md:p-2 text-right tabular">{fmtInt(it.quantity)}</td>
+                  <td className="p-1.5 md:p-2 text-right tabular">{fmtKg(it.displayWeight)}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-border bg-muted/30 font-semibold">
+                <td className="p-1.5 md:p-2">Total</td>
+                <td className="p-1.5 md:p-2 text-right tabular">
+                  {fmtInt((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.quantity ?? 0), 0))} u.
+                </td>
+                <td className="p-1.5 md:p-2 text-right tabular">{fmtKg((s.lines ?? []).reduce((sum: number, l: any) => sum + Number(l.displayWeight ?? 0), 0))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
