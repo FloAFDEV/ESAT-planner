@@ -301,7 +301,7 @@ function ProductionPage() {
       const results = await Promise.all(
         pendingMaterialOrders.map(async (o: any) => ({
           orderId: o.id,
-          feasibility: await getProductionFeasibility(o.coffret_id, o.quantity),
+          feasibility: await getProductionFeasibility(o.coffret_id, o.quantity, { excludeProductionOrderId: o.id }),
         }))
       );
       return new Map(results.map((r) => [r.orderId, r.feasibility]));
