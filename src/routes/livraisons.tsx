@@ -36,6 +36,20 @@ export const Route = createFileRoute("/livraisons")({
 
 type ShipmentLineDraft = { product_variant_id: string; quantity: number };
 
+// "BL2606003", "BL 2606003", "BL BL2606003" → "2606003"
+function normalizeBl(raw: string): string {
+  return raw.trim().replace(/^BL\s*/i, "").trim();
+}
+
+const BL_STATUS_ORDER = ["draft", "ready", "shipped", "delivered"] as const;
+function blGroupStatus(items: any[]): string {
+  const statuses = new Set(items.map((s) => String(s.status)));
+  for (const s of BL_STATUS_ORDER) {
+    if (statuses.has(s)) return s;
+  }
+  return String(items[0]?.status ?? "draft");
+}
+
 function LivraisonsPage() {
   const sb = supabase as any;
   const qc = useQueryClient();
@@ -196,25 +210,26 @@ function LivraisonsPage() {
     return rows;
   }, [shipments.data, shipSearch, shipStatus, dateFrom, dateTo]);
 
-  // Groupe les expéditions par bl_number. Les expéditions sans BL restent isolées.
+  // Groupe les expéditions par bl_number normalisé. Les expéditions sans BL restent isolées.
   const groupedShipments = useMemo(() => {
     const groups: Array<{ blNumber: string | null; shipments: any[] }> = [];
     const byBl = new Map<string, any[]>();
     for (const s of filteredShipments) {
-      const bl = s.bl_number?.trim() || null;
-      if (!bl) {
+      const raw = s.bl_number?.trim() || null;
+      if (!raw) {
         groups.push({ blNumber: null, shipments: [s] });
       } else {
-        if (!byBl.has(bl)) byBl.set(bl, []);
-        byBl.get(bl)!.push(s);
+        const key = normalizeBl(raw);
+        if (!byBl.has(key)) byBl.set(key, []);
+        byBl.get(key)!.push(s);
       }
     }
     for (const [bl, items] of byBl) {
       groups.push({ blNumber: bl, shipments: items });
     }
     return groups.sort((a, b) => {
-      const dateA = a.shipments[0]?.created_at ?? "";
-      const dateB = b.shipments[0]?.created_at ?? "";
+      const dateA = a.shipments.reduce((max, s) => s.created_at > max ? s.created_at : max, "");
+      const dateB = b.shipments.reduce((max, s) => s.created_at > max ? s.created_at : max, "");
       return dateB.localeCompare(dateA);
     });
   }, [filteredShipments]);
@@ -347,15 +362,27 @@ function LivraisonsPage() {
           if (group.blNumber) {
             const totalWeight = group.shipments.reduce((sum, s) => sum + Number(s.total_weight ?? 0), 0);
             const totalPallets = group.shipments.reduce((sum, s) => sum + Number(s.total_pallets ?? 0), 0);
+            const latestDate = group.shipments.reduce((max, s) => s.created_at > max ? s.created_at : max, "");
+            const status = blGroupStatus(group.shipments);
             return (
               <div key={`bl-${group.blNumber}`} className="rounded-lg border border-info/30 bg-info/5">
-                <div className="px-4 py-2.5 flex items-center gap-3 border-b border-info/20">
-                  <span className="font-mono font-semibold text-sm text-info">BL {group.blNumber}</span>
-                  <span className="text-xs text-muted-foreground">{group.shipments.length} expédition{group.shipments.length > 1 ? "s" : ""}</span>
-                  <span className="text-xs text-muted-foreground ml-auto">{fmtKg(totalWeight)} · {totalPallets} palette{totalPallets > 1 ? "s" : ""}</span>
+                <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 border-b border-info/20">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Truck className="h-4 w-4 text-info shrink-0" />
+                    <span className="font-mono font-bold text-base text-info">BL {group.blNumber}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${livraisonStatusMeta[status]?.cls ?? "bg-muted text-muted-foreground"}`}>
+                      {livraisonStatusMeta[status]?.label ?? status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-x-3 text-xs text-muted-foreground flex-wrap sm:ml-auto">
+                    <span>{group.shipments.length} expédition{group.shipments.length > 1 ? "s" : ""}</span>
+                    <span>{fmtKg(totalWeight)}</span>
+                    <span>{totalPallets} palette{totalPallets !== 1 ? "s" : ""}</span>
+                    <span>{fmtDate(latestDate)}</span>
+                  </div>
                 </div>
                 <div className="grid gap-3 p-3">
-                  {group.shipments.map((s: any) => <ShipmentCard key={s.id} s={s} onEdit={setEditShipment} onDelete={setDeleteId} onPalettes={setPalettesShipment} transitionShipment={transitionShipment} />)}
+                  {group.shipments.map((s: any) => <ShipmentCard key={s.id} s={s} hideBl onEdit={setEditShipment} onDelete={setDeleteId} onPalettes={setPalettesShipment} transitionShipment={transitionShipment} />)}
                 </div>
               </div>
             );
@@ -401,8 +428,9 @@ function LivraisonsPage() {
 }
 
 
-function ShipmentCard({ s, onEdit, onDelete, onPalettes, transitionShipment }: {
+function ShipmentCard({ s, hideBl = false, onEdit, onDelete, onPalettes, transitionShipment }: {
   s: any;
+  hideBl?: boolean;
   onEdit: (s: any) => void;
   onDelete: (id: string) => void;
   onPalettes: (s: any) => void;
@@ -426,9 +454,9 @@ function ShipmentCard({ s, onEdit, onDelete, onPalettes, transitionShipment }: {
             )}
             <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="font-mono">{s.reference ?? s.id}</span>
-              {s.bl_number && (
+              {!hideBl && s.bl_number && (
                 <span className="inline-flex items-center gap-1 font-mono bg-info/10 text-info border border-info/20 rounded px-1.5 py-0">
-                  BL {s.bl_number}
+                  BL {normalizeBl(s.bl_number)}
                 </span>
               )}
               <span>{fmtDate(s.created_at)}</span>
