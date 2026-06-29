@@ -25,10 +25,22 @@ export type ProductionFeasibilityResult = {
   }>;
 };
 
+export type FeasibilityOptions = {
+  /**
+   * Exclure les réservations actives de cet OF du calcul du disponible.
+   * À utiliser quand on réévalue un OF déjà créé (pending_material → relance)
+   * pour éviter que l'OF se batte contre sa propre réservation.
+   */
+  excludeProductionOrderId?: string;
+};
+
 export async function getProductionFeasibility(
   coffretId: string,
-  quantity: number
+  quantity: number,
+  options: FeasibilityOptions = {}
 ): Promise<ProductionFeasibilityResult> {
+  const { excludeProductionOrderId } = options;
+
   const empty: ProductionFeasibilityResult = {
     can_produce: false,
     summary: { total_missing: 0, total_components: 0 },
@@ -60,26 +72,43 @@ export async function getProductionFeasibility(
   const composantIds = Array.from(neededByComposant.keys());
   if (composantIds.length === 0) return empty;
 
-  // Read stock + real-time reservations in parallel for conservative available calculation
+  // Read stock + real-time reservations in parallel
+  let reservationsQuery = sb
+    .from("stock_reservations")
+    .select("composant_id,quantity,production_order_id")
+    .eq("status", "active")
+    .in("composant_id", composantIds);
+
   const [composantResult, reservationsResult] = await Promise.all([
     sb.from("composants").select("id,reference,name,stock,reserved_stock").in("id", composantIds).is("deleted_at", null),
-    sb.from("stock_reservations").select("composant_id,quantity").eq("status", "active").in("composant_id", composantIds),
+    reservationsQuery,
   ]);
   if (composantResult.error) throw composantResult.error;
   if (reservationsResult.error) throw reservationsResult.error;
 
-  // Sum real-time reservations per composant
+  // Sum real-time reservations per composant, optionally excluding one OF's own reservations.
+  // When excludeProductionOrderId is set, realtimeReserved is the sole source of truth
+  // (cachedReserved cannot be filtered by order, so Math.max would re-introduce the excluded amount).
   const realtimeReserved = new Map<string, number>();
-  for (const r of (reservationsResult.data ?? []) as Array<{ composant_id: string; quantity: number }>) {
+  for (const r of (reservationsResult.data ?? []) as Array<{ composant_id: string; quantity: number; production_order_id: string }>) {
+    if (excludeProductionOrderId && r.production_order_id === excludeProductionOrderId) continue;
     realtimeReserved.set(r.composant_id, (realtimeReserved.get(r.composant_id) ?? 0) + Number(r.quantity ?? 0));
   }
 
   const byId = new Map<string, { reference: string; name: string; available: number }>(
     (composantResult.data ?? []).map((row: any) => {
-      const cachedReserved = Number(row.reserved_stock ?? 0);
-      const realtimeRes = realtimeReserved.get(row.id) ?? 0;
-      // Use the larger of the two to stay conservative when the trigger cache drifts
-      const reserved = Math.max(cachedReserved, realtimeRes);
+      let reserved: number;
+      if (excludeProductionOrderId) {
+        // realtimeReserved already excludes the target OF → use it directly.
+        // Math.max with cachedReserved would reintroduce the excluded reservation.
+        reserved = realtimeReserved.get(row.id) ?? 0;
+      } else {
+        // No exclusion: stay conservative by taking the larger of cached vs realtime
+        // in case the trigger cache is momentarily behind.
+        const cachedReserved = Number(row.reserved_stock ?? 0);
+        const realtimeRes = realtimeReserved.get(row.id) ?? 0;
+        reserved = Math.max(cachedReserved, realtimeRes);
+      }
       return [
         row.id,
         {
