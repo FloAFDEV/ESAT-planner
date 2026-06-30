@@ -13,103 +13,119 @@ export const Route = createFileRoute("/legal/privacy")({
 function PrivacyPage() {
   return (
     <div className="min-h-screen bg-background px-4 py-12">
-      <div className="max-w-2xl mx-auto prose prose-sm dark:prose-invert">
-        <Link to="/login" className="text-xs text-muted-foreground hover:underline mb-6 inline-block">← Retour</Link>
-        <h1 className="text-2xl font-bold mb-2">Politique de confidentialité</h1>
-        <p className="text-xs text-muted-foreground mb-8">Conforme RGPD — Version 1.0 — juillet 2026</p>
+      <div className="max-w-2xl mx-auto space-y-6 text-sm">
+        <div>
+          <Link to="/login" className="text-xs text-muted-foreground hover:underline inline-block mb-6">← Retour</Link>
+          <h1 className="text-2xl font-bold">Politique de confidentialité</h1>
+          <p className="text-xs text-muted-foreground mt-1">Version 1.0 — juillet 2026 · Application Coffret ERP · ESAT AGECET</p>
+        </div>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">1. Responsable du traitement</h2>
-        <p className="text-sm text-muted-foreground">
-          Le responsable du traitement des données est l'<strong>ESAT AGECET</strong>, en qualité d'exploitant de l'Application Coffret ERP. AFDEV intervient en qualité de sous-traitant technique (développement et hébergement).
-        </p>
+        <Section title="1. Qui traite vos données ?">
+          <p>
+            <strong>Responsable du traitement :</strong> ESAT AGECET, en tant qu'organisation utilisatrice de l'application.
+          </p>
+          <p className="mt-2">
+            <strong>Prestataire technique :</strong> AFDEV, développeur et mainteneur de l'application, intervient en qualité de sous-traitant. AFDEV n'accède aux données qu'à des fins de maintenance technique et ne les exploite à aucune fin commerciale ou tierce.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">2. Données collectées</h2>
-        <p className="text-sm text-muted-foreground">L'Application traite les catégories de données suivantes :</p>
-        <div className="mt-2 overflow-x-auto">
-          <table className="text-sm w-full border border-border rounded">
+        <Section title="2. Données traitées">
+          <p>L'application traite uniquement des données nécessaires à l'activité métier interne :</p>
+          <table className="mt-3 w-full text-xs border border-border rounded overflow-hidden">
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left p-2 font-medium">Catégorie</th>
                 <th className="text-left p-2 font-medium">Données</th>
-                <th className="text-left p-2 font-medium">Finalité</th>
+                <th className="text-left p-2 font-medium">Usage</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-t border-border">
-                <td className="p-2 text-muted-foreground">Utilisateurs</td>
-                <td className="p-2 text-muted-foreground">Adresse email</td>
-                <td className="p-2 text-muted-foreground">Authentification</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="p-2 text-muted-foreground">Clients</td>
-                <td className="p-2 text-muted-foreground">Raison sociale, adresse, contact, téléphone, email</td>
-                <td className="p-2 text-muted-foreground">Gestion des expéditions et BL</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="p-2 text-muted-foreground">Expéditions</td>
-                <td className="p-2 text-muted-foreground">Références, poids, palettes, statut</td>
-                <td className="p-2 text-muted-foreground">Suivi logistique</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="p-2 text-muted-foreground">Production</td>
-                <td className="p-2 text-muted-foreground">Ordres de fabrication, mouvements de stock</td>
-                <td className="p-2 text-muted-foreground">Gestion de production interne</td>
-              </tr>
+              {[
+                ["Utilisateurs", "Adresse email", "Authentification et accès"],
+                ["Clients", "Raison sociale, adresse, contact, téléphone, email", "Gestion des livraisons et BL"],
+                ["Production", "Ordres de fabrication, stocks, mouvements", "Suivi de production interne"],
+                ["Expéditions", "Références, poids, palettes, statuts", "Suivi logistique"],
+              ].map(([cat, data, usage]) => (
+                <tr key={cat} className="border-t border-border">
+                  <td className="p-2 text-muted-foreground align-top">{cat}</td>
+                  <td className="p-2 text-muted-foreground align-top">{data}</td>
+                  <td className="p-2 text-muted-foreground align-top">{usage}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-        <p className="text-sm text-muted-foreground mt-2">
-          Aucune donnée sensible au sens de l'article 9 du RGPD n'est collectée.
-        </p>
+          <p className="mt-3">
+            Aucune donnée sensible (santé, opinions, etc.) n'est collectée. Aucune donnée n'est utilisée à des fins de profilage, publicité ou analyse commerciale.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">3. Base légale</h2>
-        <p className="text-sm text-muted-foreground">
-          Le traitement est fondé sur l'<strong>intérêt légitime</strong> de l'ESAT AGECET pour la gestion de son activité de production et de logistique, ainsi que sur l'<strong>exécution du contrat</strong> avec ses clients professionnels.
-        </p>
+        <Section title="3. Usage strictement interne">
+          <p>
+            Les données traitées dans l'application le sont <strong>exclusivement pour les besoins opérationnels de l'ESAT AGECET</strong>. Elles ne sont ni vendues, ni partagées avec des tiers, ni utilisées à d'autres fins.
+          </p>
+          <p className="mt-2">
+            L'accès est limité aux utilisateurs authentifiés disposant d'un compte activé par l'administrateur de l'organisation. Chaque session est protégée et se ferme automatiquement après 30 minutes d'inactivité.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">4. Hébergement et sous-traitants</h2>
-        <p className="text-sm text-muted-foreground">
-          Les données sont hébergées sur <strong>Supabase</strong> (infrastructure PostgreSQL, région EU) et <strong>Vercel</strong> (front-end). Ces prestataires agissent en qualité de sous-traitants et sont soumis à des obligations contractuelles de sécurité conformes au RGPD.
-        </p>
+        <Section title="4. Hébergement">
+          <p>
+            Les données sont hébergées par deux prestataires conformes au RGPD :
+          </p>
+          <ul className="mt-2 space-y-1 list-disc pl-5">
+            <li><strong>Supabase</strong> — base de données PostgreSQL, infrastructure hébergée en Europe (UE)</li>
+            <li><strong>Vercel</strong> — hébergement de l'application frontend</li>
+          </ul>
+          <p className="mt-2">Ces prestataires agissent en tant que sous-traitants techniques et ne peuvent utiliser les données qu'à des fins d'hébergement et de fourniture du service.</p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">5. Durée de conservation</h2>
-        <ul className="text-sm text-muted-foreground list-disc pl-5 mt-1 space-y-1">
-          <li>Données clients actifs : durée de la relation commerciale + 3 ans</li>
-          <li>Historique des mouvements de stock : 5 ans (obligation comptable)</li>
-          <li>Comptes utilisateurs : supprimés dès la fin d'habilitation</li>
-          <li>Sessions : 30 minutes d'inactivité maximum (déconnexion automatique)</li>
-        </ul>
+        <Section title="5. Durée de conservation">
+          <p>
+            Les données sont conservées <strong>tant que l'application est en service</strong> et que l'organisation l'utilise activement.
+          </p>
+          <p className="mt-2">
+            Les comptes utilisateurs sont supprimés dès la fin d'habilitation de la personne. Les données clients et les historiques opérationnels (production, expéditions) sont conservés pour les besoins de suivi et de comptabilité interne.
+          </p>
+          <p className="mt-2">
+            En cas d'arrêt définitif du service, l'organisation peut exporter l'intégralité de ses données avant résiliation. Sur demande explicite, des suppressions ciblées peuvent être effectuées par l'administrateur ou le prestataire technique.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">6. Sécurité</h2>
-        <p className="text-sm text-muted-foreground">
-          Les mesures de sécurité mises en place comprennent : authentification par mot de passe, RLS (Row Level Security) sur toutes les tables de la base de données, chiffrement des données en transit (HTTPS), déconnexion automatique après inactivité, et limitation du nombre de tentatives de connexion.
-        </p>
+        <Section title="6. Vos droits">
+          <p>
+            Conformément au RGPD, toute personne dont les données sont traitées peut demander :
+          </p>
+          <ul className="mt-2 space-y-1 list-disc pl-5">
+            <li>L'accès à ses données</li>
+            <li>La rectification de données incorrectes</li>
+            <li>La suppression de ses données</li>
+            <li>L'export de ses données (disponible directement dans l'application)</li>
+          </ul>
+          <p className="mt-2">
+            Ces demandes s'adressent à l'administrateur de l'ESAT AGECET. En cas de litige, vous pouvez contacter la{" "}
+            <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">CNIL</a>.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">7. Droits des personnes</h2>
-        <p className="text-sm text-muted-foreground">
-          Conformément au RGPD, toute personne dont les données sont traitées dispose des droits d'accès, de rectification, d'effacement, de limitation et de portabilité. Ces droits s'exercent auprès de l'administrateur de l'ESAT AGECET ou via{" "}
-          <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="underline">afdev.fr</a>.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          En cas de litige, vous pouvez saisir la <strong>CNIL</strong> (Commission Nationale de l'Informatique et des Libertés) à l'adresse{" "}
-          <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer" className="underline">cnil.fr</a>.
-        </p>
+        <Section title="7. Propriété des données">
+          <p>
+            Les données saisies dans l'application appartiennent intégralement à l'ESAT AGECET. L'éditeur (AFDEV) n'en revendique aucun droit. L'export complet est disponible à tout moment depuis la page "Exporter les données".
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">8. Propriété des données</h2>
-        <p className="text-sm text-muted-foreground">
-          Les données saisies dans l'application (clients, expéditions, ordres de fabrication, stocks) appartiennent intégralement à l'<strong>ESAT AGECET</strong>. L'application est un outil de traitement mis à disposition — elle ne revendique aucun droit sur ces données.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          L'organisation peut à tout moment exporter l'intégralité de ses données au format CSV via la fonctionnalité <strong>"Exporter les données"</strong> disponible dans l'application. Cet export inclut : clients, expéditions, lignes d'expédition et ordres de fabrication. Aucune restriction technique ne limite cet accès.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          En cas d'arrêt du service, les données restent accessibles dans la base Supabase associée au projet pendant la durée de conservation de la plateforme (30 jours après suppression du projet). Un export préalable est recommandé avant toute résiliation.
-        </p>
-
-        <div className="mt-10 pt-6 border-t border-border text-xs text-muted-foreground">
+        <div className="pt-6 border-t border-border text-xs text-muted-foreground">
           <Link to="/legal/cgu" className="hover:underline">→ Conditions générales d'utilisation</Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <h2 className="font-semibold text-base">{title}</h2>
+      <div className="text-muted-foreground leading-relaxed">{children}</div>
     </div>
   );
 }

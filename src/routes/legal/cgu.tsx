@@ -13,72 +13,96 @@ export const Route = createFileRoute("/legal/cgu")({
 function CguPage() {
   return (
     <div className="min-h-screen bg-background px-4 py-12">
-      <div className="max-w-2xl mx-auto prose prose-sm dark:prose-invert">
-        <Link to="/login" className="text-xs text-muted-foreground hover:underline mb-6 inline-block">← Retour</Link>
-        <h1 className="text-2xl font-bold mb-2">Conditions Générales d'Utilisation</h1>
-        <p className="text-xs text-muted-foreground mb-8">Version 1.0 — en vigueur au 1er juillet 2026</p>
+      <div className="max-w-2xl mx-auto space-y-6 text-sm">
+        <div>
+          <Link to="/login" className="text-xs text-muted-foreground hover:underline inline-block mb-6">← Retour</Link>
+          <h1 className="text-2xl font-bold">Conditions générales d'utilisation</h1>
+          <p className="text-xs text-muted-foreground mt-1">Version 1.0 — juillet 2026 · Application Coffret ERP · ESAT AGECET</p>
+        </div>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">1. Objet</h2>
-        <p className="text-sm text-muted-foreground">
-          L'application <strong>Coffret ERP</strong> (ci-après « l'Application ») est un outil interne de gestion de production, de stock et d'expéditions, développé par AFDEV pour l'usage exclusif de l'ESAT AGECET et de son personnel autorisé.
-        </p>
+        <Section title="1. Objet">
+          <p>
+            <strong>Coffret ERP</strong> est une application de gestion interne développée par <strong>AFDEV</strong> pour le compte de l'<strong>ESAT AGECET</strong>. Elle permet de gérer les ordres de fabrication, les stocks, les clients et les expéditions.
+          </p>
+          <p className="mt-2">
+            Cette application est réservée à un <strong>usage interne exclusif</strong> de l'organisation. Elle n'est pas destinée à un usage commercial, public ou tiers.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">2. Accès et authentification</h2>
-        <p className="text-sm text-muted-foreground">
-          L'accès à l'Application est réservé aux collaborateurs disposant d'un compte activé par l'administrateur. Chaque utilisateur est responsable de la confidentialité de ses identifiants. Tout accès non autorisé doit être signalé immédiatement à l'administrateur.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          Pour des raisons de sécurité, la session est automatiquement fermée après <strong>30 minutes d'inactivité</strong>.
-        </p>
+        <Section title="2. Accès et utilisateurs autorisés">
+          <p>
+            L'accès à l'application est réservé aux personnes disposant d'un compte activé par l'administrateur de l'ESAT AGECET. Tout compte est nominatif et non transférable.
+          </p>
+          <p className="mt-2">
+            Chaque utilisateur est responsable de la confidentialité de ses identifiants. Le partage de compte entre plusieurs personnes est interdit. Tout accès non autorisé doit être signalé immédiatement à l'administrateur.
+          </p>
+          <p className="mt-2">
+            La session est automatiquement fermée après 30 minutes d'inactivité.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">3. Utilisation autorisée</h2>
-        <p className="text-sm text-muted-foreground">L'Application est mise à disposition pour les usages professionnels suivants :</p>
-        <ul className="text-sm text-muted-foreground list-disc pl-5 mt-1 space-y-1">
-          <li>Gestion des ordres de fabrication (OF)</li>
-          <li>Suivi des stocks de composants et de coffrets</li>
-          <li>Préparation et suivi des expéditions (Bons de Livraison)</li>
-          <li>Gestion du référentiel clients</li>
-        </ul>
-        <p className="text-sm text-muted-foreground mt-2">
-          Toute utilisation à des fins personnelles, commerciales ou frauduleuses est interdite.
-        </p>
+        <Section title="3. Responsabilité de l'utilisateur">
+          <p>
+            L'utilisateur est responsable des données qu'il saisit dans l'application : exactitude des informations clients, des quantités, des statuts et des références. L'éditeur ne vérifie pas la cohérence des données métier saisies.
+          </p>
+          <p className="mt-2">
+            Les opérations irréversibles (suppression, clôture d'OF, mouvements de stock) engagent la responsabilité de l'utilisateur qui les effectue.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">4. Responsabilités</h2>
-        <p className="text-sm text-muted-foreground">
-          L'ESAT AGECET s'efforce d'assurer la disponibilité et la fiabilité de l'Application. Toutefois, des interruptions ponctuelles peuvent survenir pour maintenance ou mise à jour. Les données saisies restent sous la responsabilité de l'utilisateur.
-        </p>
+        <Section title="4. Rôle de l'éditeur">
+          <p>
+            AFDEV fournit un <strong>outil technique</strong>. Sa responsabilité se limite à la disponibilité et au bon fonctionnement de l'application.
+          </p>
+          <p className="mt-2">
+            AFDEV n'est pas responsable de l'usage qui est fait de l'application en interne, du contenu des données saisies, ni des conséquences d'un accès non autorisé résultant d'un partage de compte par l'organisation utilisatrice.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">5. Intégrité des données</h2>
-        <p className="text-sm text-muted-foreground">
-          Les opérations irréversibles (suppression d'OF, de clients, de mouvements de stock) doivent être réalisées avec discernement. L'Application conserve un historique des mouvements à des fins d'audit interne.
-        </p>
+        <Section title="5. Disponibilité du service">
+          <p>
+            L'application est fournie sans garantie de continuité de service. Des interruptions peuvent survenir pour maintenance, mise à jour ou incident technique. L'éditeur s'efforce de limiter ces interruptions et d'en informer les utilisateurs.
+          </p>
+          <p className="mt-2">
+            Un export régulier des données est recommandé. L'export complet est disponible à tout moment depuis l'application (section "Exporter les données").
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">6. Propriété des données et export</h2>
-        <p className="text-sm text-muted-foreground">
-          Les données saisies dans l'application appartiennent à l'organisation utilisatrice (ESAT AGECET). L'application est un outil de traitement — elle ne revendique aucun droit sur ces données.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          L'export complet des données est disponible à tout moment via la fonctionnalité "Exporter les données". L'organisation est responsable de la conservation sécurisée des exports produits.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          L'ESAT AGECET ne garantit pas la continuité du service (maintenances, mises à jour, interruptions techniques imprévues). Un export régulier des données est recommandé.
-        </p>
+        <Section title="6. Propriété des données">
+          <p>
+            Les données saisies dans l'application appartiennent intégralement à l'ESAT AGECET. L'éditeur n'en revendique aucun droit et ne les exploite à aucune fin commerciale ou tierce.
+          </p>
+          <p className="mt-2">
+            L'organisation peut à tout moment exporter l'intégralité de ses données au format CSV, sans restriction.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">7. Modification des CGU</h2>
-        <p className="text-sm text-muted-foreground">
-          Ces CGU peuvent être mises à jour à tout moment. Les utilisateurs en seront informés par voie interne. L'utilisation continue de l'Application après notification vaut acceptation des nouvelles conditions.
-        </p>
+        <Section title="7. Évolution des CGU">
+          <p>
+            Ces conditions peuvent être mises à jour. Les utilisateurs en seront informés lors de leur prochaine connexion. L'utilisation continue de l'application vaut acceptation des nouvelles conditions.
+          </p>
+        </Section>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">8. Contact</h2>
-        <p className="text-sm text-muted-foreground">
-          Pour toute question relative à ces CGU, contactez l'administrateur de l'Application ou AFDEV à l'adresse{" "}
-          <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="underline">afdev.fr</a>.
-        </p>
+        <Section title="8. Contact">
+          <p>
+            Pour toute question ou signalement d'incident, contactez l'administrateur de l'ESAT AGECET ou AFDEV via{" "}
+            <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">afdev.fr</a>.
+          </p>
+        </Section>
 
-        <div className="mt-10 pt-6 border-t border-border text-xs text-muted-foreground">
+        <div className="pt-6 border-t border-border text-xs text-muted-foreground">
           <Link to="/legal/privacy" className="hover:underline">→ Politique de confidentialité</Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <h2 className="font-semibold text-base">{title}</h2>
+      <div className="text-muted-foreground leading-relaxed">{children}</div>
     </div>
   );
 }
