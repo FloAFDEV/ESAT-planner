@@ -95,6 +95,17 @@ function PrivacyPage() {
           <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer" className="underline">cnil.fr</a>.
         </p>
 
+        <h2 className="text-base font-semibold mt-6 mb-2">8. Propriété des données</h2>
+        <p className="text-sm text-muted-foreground">
+          Les données saisies dans l'application (clients, expéditions, ordres de fabrication, stocks) appartiennent intégralement à l'<strong>ESAT AGECET</strong>. L'application est un outil de traitement mis à disposition — elle ne revendique aucun droit sur ces données.
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          L'organisation peut à tout moment exporter l'intégralité de ses données au format CSV via la fonctionnalité <strong>"Exporter les données"</strong> disponible dans l'application. Cet export inclut : clients, expéditions, lignes d'expédition et ordres de fabrication. Aucune restriction technique ne limite cet accès.
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          En cas d'arrêt du service, les données restent accessibles dans la base Supabase associée au projet pendant la durée de conservation de la plateforme (30 jours après suppression du projet). Un export préalable est recommandé avant toute résiliation.
+        </p>
+
         <div className="mt-10 pt-6 border-t border-border text-xs text-muted-foreground">
           <Link to="/legal/cgu" className="hover:underline">→ Conditions générales d'utilisation</Link>
         </div>

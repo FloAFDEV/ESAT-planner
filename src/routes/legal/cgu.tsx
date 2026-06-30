@@ -53,12 +53,23 @@ function CguPage() {
           Les opérations irréversibles (suppression d'OF, de clients, de mouvements de stock) doivent être réalisées avec discernement. L'Application conserve un historique des mouvements à des fins d'audit interne.
         </p>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">6. Modification des CGU</h2>
+        <h2 className="text-base font-semibold mt-6 mb-2">6. Propriété des données et export</h2>
+        <p className="text-sm text-muted-foreground">
+          Les données saisies dans l'application appartiennent à l'organisation utilisatrice (ESAT AGECET). L'application est un outil de traitement — elle ne revendique aucun droit sur ces données.
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          L'export complet des données est disponible à tout moment via la fonctionnalité "Exporter les données". L'organisation est responsable de la conservation sécurisée des exports produits.
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          L'ESAT AGECET ne garantit pas la continuité du service (maintenances, mises à jour, interruptions techniques imprévues). Un export régulier des données est recommandé.
+        </p>
+
+        <h2 className="text-base font-semibold mt-6 mb-2">7. Modification des CGU</h2>
         <p className="text-sm text-muted-foreground">
           Ces CGU peuvent être mises à jour à tout moment. Les utilisateurs en seront informés par voie interne. L'utilisation continue de l'Application après notification vaut acceptation des nouvelles conditions.
         </p>
 
-        <h2 className="text-base font-semibold mt-6 mb-2">7. Contact</h2>
+        <h2 className="text-base font-semibold mt-6 mb-2">8. Contact</h2>
         <p className="text-sm text-muted-foreground">
           Pour toute question relative à ces CGU, contactez l'administrateur de l'Application ou AFDEV à l'adresse{" "}
           <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="underline">afdev.fr</a>.
