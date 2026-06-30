@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Factory, Boxes, Truck, Layers, Users, Archive, Sun, Moon, LogOut } from "lucide-react";
+import { LayoutDashboard, Factory, Boxes, Truck, Layers, Users, Archive, Sun, Moon, LogOut, Download } from "lucide-react";
 import { UI } from "@/lib/uiLabels";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -86,6 +86,13 @@ export function AppLayout() {
             <LogOut className="h-3.5 w-3.5" />
             Déconnexion
           </button>
+          <Link
+            to="/export"
+            className="flex items-center gap-1.5 w-full px-2 py-1 rounded text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exporter les données
+          </Link>
           <div className="text-[10px] text-sidebar-foreground/40 leading-tight px-2 pt-1">
             <div>v1.0 · ERP coffrets</div>
             <div>Développé par <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="hover:underline">AFDEV</a> pour ESAT AGECET</div>
