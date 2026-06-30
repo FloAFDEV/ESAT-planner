@@ -12,13 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { FileDown, Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers } from "lucide-react";
+import { FileDown, Plus, Search, Trash2, Truck, Phone, Mail, MapPin, X, Pencil, Layers, Printer, AlertTriangle } from "lucide-react";
 import { CreateClientDialog } from "@/components/CreateClientDialog";
 import { fmtDate, fmtInt, fmtKg, fmtPalette } from "@/lib/format";
 import { livraisonStatusMeta, normalizeLivraisonStatus, type LivraisonStatus } from "@/lib/domain";
 import { UI } from "@/lib/uiLabels";
 import { MSG } from "@/lib/messages";
 import agecetLogo from "@/assets/logo_agecet_hands.jpg";
+import { clientCompleteness } from "@/lib/clientCompleteness";
 
 export const Route = createFileRoute("/livraisons")({
   head: () => ({
@@ -57,6 +58,7 @@ function LivraisonsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editShipment, setEditShipment] = useState<any | null>(null);
   const [palettesShipment, setPalettesShipment] = useState<any | null>(null);
+  const [blDocumentGroup, setBlDocumentGroup] = useState<{ blNumber: string; shipments: any[] } | null>(null);
   const urlSearch = Route.useSearch();
   const [shipSearch, setShipSearch] = useState(() => urlSearch.filterClient || "");
   const [shipStatus, setShipStatus] = useState<string>(() => urlSearch.filterStatus || "all");
@@ -379,6 +381,9 @@ function LivraisonsPage() {
                     <span>{fmtKg(totalWeight)}</span>
                     <span>{totalPallets} palette{totalPallets !== 1 ? "s" : ""}</span>
                     <span>{fmtDate(latestDate)}</span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 ml-1" onClick={() => setBlDocumentGroup({ blNumber: group.blNumber!, shipments: group.shipments })}>
+                      <Printer className="h-3 w-3" /> Voir BL
+                    </Button>
                   </div>
                 </div>
                 <div className="grid gap-3 p-3">
@@ -421,6 +426,13 @@ function LivraisonsPage() {
         <PalettesDetailDialog
           shipment={palettesShipment}
           onClose={() => setPalettesShipment(null)}
+        />
+      )}
+
+      {blDocumentGroup && (
+        <BLDocumentDialog
+          group={blDocumentGroup}
+          onClose={() => setBlDocumentGroup(null)}
         />
       )}
     </div>
@@ -566,9 +578,15 @@ function ClientPopover({ client, shipmentDate, shipmentStatus }: {
             <span>{address}</span>
           </div>
         )}
-        {!client.phone && !client.email && !address && (
-          <p className="text-xs text-muted-foreground italic">Aucune coordonnée renseignée.</p>
-        )}
+        {(() => {
+          const { missingFields } = clientCompleteness(client);
+          return missingFields.length > 0 ? (
+            <div className="pt-2 border-t border-amber-200 flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+              <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+              <span>Profil incomplet — manquant : {missingFields.join(", ")}</span>
+            </div>
+          ) : null;
+        })()}
         {shipmentDate && (
           <div className="pt-2 border-t border-border text-[11px] text-muted-foreground">
             Ce shipment : {new Date(shipmentDate).toLocaleDateString("fr-FR")}
@@ -678,6 +696,16 @@ function EditShipmentDialog({ shipment, onClose }: { shipment: any; onClose: () 
                 ))}
               </SelectContent>
             </Select>
+            {clientId && (() => {
+              const selectedClient = (clients.data ?? []).find((c: any) => c.id === clientId);
+              const { missingFields } = clientCompleteness(selectedClient);
+              return missingFields.length > 0 ? (
+                <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                  <span>Profil incomplet — manquant : {missingFields.join(", ")}.</span>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -1063,6 +1091,16 @@ function NewShipmentDialog() {
                   ))}
                 </SelectContent>
               </Select>
+              {clientId && (() => {
+                const selectedClient = (clients.data ?? []).find((c: any) => c.id === clientId);
+                const { missingFields } = clientCompleteness(selectedClient);
+                return missingFields.length > 0 ? (
+                  <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                    <span>Profil incomplet — manquant : {missingFields.join(", ")}. Le BL sera incomplet.</span>
+                  </div>
+                ) : null;
+              })()}
             </div>
             <div className="space-y-2">
               <Label>Statut</Label>
@@ -1259,6 +1297,250 @@ function NewShipmentDialog() {
           <Button variant="outline" onClick={() => { setOpen(false); reset(); }}>Annuler</Button>
           <Button onClick={() => create.mutate()} disabled={create.isPending || !canSubmit}>
             Créer le shipment
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Bon de Livraison (document imprimable) ────────────────────────────────────
+
+function BLDocumentDialog({ group, onClose }: { group: { blNumber: string; shipments: any[] }; onClose: () => void }) {
+  // Aggregate data from all shipments in the BL group
+  let client: any = null;
+  let latestDate = "";
+  const allLines: any[] = [];
+  const allPallets: any[] = [];
+
+  for (const s of group.shipments) {
+    if (!client && s.client_entity) client = s.client_entity;
+    if (s.created_at > latestDate) latestDate = s.created_at;
+    allLines.push(...(s.lines ?? []));
+    allPallets.push(...(s.pallets ?? []));
+  }
+
+  // Consolidate lines by variant reference
+  const linesByVariant = new Map<string, { variant: any; quantity: number; weight: number }>();
+  for (const l of allLines) {
+    const key = l.variant?.reference ?? l.product_variant_id ?? "?";
+    const cur = linesByVariant.get(key);
+    if (cur) { cur.quantity += Number(l.quantity ?? 0); cur.weight += Number(l.displayWeight ?? 0); }
+    else linesByVariant.set(key, { variant: l.variant, quantity: Number(l.quantity ?? 0), weight: Number(l.displayWeight ?? 0) });
+  }
+
+  const totalProductWeight = allLines.reduce((s, l) => s + Number(l.displayWeight ?? 0), 0);
+  const totalTareWeight = allPallets.reduce((s, p) => s + Number(p.weight ?? 0), 0);
+  const totalWeight = totalProductWeight + totalTareWeight;
+  const status = blGroupStatus(group.shipments);
+  const statusMeta = livraisonStatusMeta[status];
+  const address = client ? [client.address, client.postal_code, client.city, client.country].filter(Boolean).join(", ") : null;
+
+  const { missingFields: missingClientFields } = clientCompleteness(client);
+
+  const Needed = () => (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-300 rounded px-1.5 py-0.5 print:hidden">
+      À renseigner
+    </span>
+  );
+
+  const refs = group.shipments.map((s) => s.client_of_reference).filter(Boolean);
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogHeader className="print:hidden flex-row items-center justify-between">
+          <DialogTitle className="flex items-center gap-2">
+            <Truck className="h-4 w-4" /> Bon de Livraison — BL {group.blNumber}
+          </DialogTitle>
+          {missingClientFields.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              Profil client incomplet ({missingClientFields.length} champ{missingClientFields.length > 1 ? "s" : ""} manquant{missingClientFields.length > 1 ? "s" : ""})
+            </div>
+          )}
+        </DialogHeader>
+
+        {/* ─── Document imprimable ─── */}
+        <div className="space-y-5 text-sm">
+
+          {/* En-tête */}
+          <div className="flex items-start justify-between gap-4 border-b-2 border-foreground pb-4">
+            <div className="flex items-center gap-3">
+              <img src={agecetLogo} alt="ESAT AGECET" className="h-14 w-auto rounded" />
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">ESAT AGECET</div>
+                <div className="font-bold text-xl leading-tight">Bon de Livraison</div>
+              </div>
+            </div>
+            <div className="text-right space-y-1">
+              <div className="font-mono font-bold text-2xl text-info">BL {group.blNumber}</div>
+              <div className="text-xs text-muted-foreground">{fmtDate(latestDate)}</div>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${statusMeta?.cls ?? "bg-muted text-muted-foreground"}`}>
+                {statusMeta?.label ?? status}
+              </span>
+            </div>
+          </div>
+
+          {group.shipments.length > 1 && (
+            <div className="text-[11px] text-muted-foreground">
+              {group.shipments.length} expéditions : {group.shipments.map((s) => s.reference ?? s.id?.slice(0, 8)).join(" · ")}
+            </div>
+          )}
+
+          {/* Destinataire + Contact */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground border-b pb-1">Destinataire</div>
+              {client ? (
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-base">{client.name}</div>
+                  {address
+                    ? <div className="text-xs text-muted-foreground">{address}</div>
+                    : <div className="flex items-center gap-1.5 text-xs text-muted-foreground">Adresse : <Needed /></div>
+                  }
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">Client inconnu — <Needed /></div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground border-b pb-1">Contact & Références</div>
+              <div className="space-y-0.5 text-xs">
+                {client?.contact_name
+                  ? <div>{client.contact_name}</div>
+                  : <div className="flex items-center gap-1.5 text-muted-foreground">Contact : <Needed /></div>
+                }
+                {client?.phone
+                  ? <div className="flex items-center gap-1"><Phone className="h-3 w-3 text-muted-foreground" /> {client.phone}</div>
+                  : <div className="flex items-center gap-1.5 text-muted-foreground">Téléphone : <Needed /></div>
+                }
+                {client?.email
+                  ? <div className="flex items-center gap-1"><Mail className="h-3 w-3 text-muted-foreground" /> {client.email}</div>
+                  : <div className="flex items-center gap-1.5 text-muted-foreground">E-mail : <Needed /></div>
+                }
+                {refs.length > 0 && (
+                  <div className="pt-1 border-t border-border font-mono font-medium">OF : {refs.join(" · ")}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Logistique — données non disponibles en DB */}
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-widest font-semibold text-amber-700 flex items-center gap-1.5">
+              <AlertTriangle className="h-3 w-3 print:hidden" /> Logistique <span className="font-normal text-amber-600">(à compléter manuellement)</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              {["Transporteur", "Date de livraison prévue", "Instructions spéciales"].map((label) => (
+                <div key={label}>
+                  <div className="text-muted-foreground mb-1">{label}</div>
+                  <div className="h-7 border-b border-dashed border-amber-300" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Lignes produits */}
+          <div className="space-y-2">
+            <div className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground border-b pb-1">Produits expédiés</div>
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-2 font-medium">Référence</th>
+                  <th className="text-left p-2 font-medium">Désignation</th>
+                  <th className="text-right p-2 font-medium">Quantité</th>
+                  <th className="text-right p-2 font-medium">Poids/u.</th>
+                  <th className="text-right p-2 font-medium">Poids ligne</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...linesByVariant.values()].map((item, i) => (
+                  <tr key={i} className="border-t border-border">
+                    <td className="p-2 font-mono">{item.variant?.reference ?? "—"}</td>
+                    <td className="p-2">{item.variant?.name ?? "—"}</td>
+                    <td className="p-2 text-right tabular">{fmtInt(item.quantity)}</td>
+                    <td className="p-2 text-right tabular">{item.variant?.weight ? fmtKg(item.variant.weight) : "—"}</td>
+                    <td className="p-2 text-right tabular font-medium">{fmtKg(item.weight)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-foreground bg-muted/30 font-semibold">
+                  <td className="p-2" colSpan={2}>Total produits</td>
+                  <td className="p-2 text-right tabular">{fmtInt([...linesByVariant.values()].reduce((s, it) => s + it.quantity, 0))} u.</td>
+                  <td />
+                  <td className="p-2 text-right tabular">{fmtKg(totalProductWeight)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Palettes */}
+          {allPallets.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground border-b pb-1">Conditionnement</div>
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left p-2 font-medium">Palette</th>
+                    <th className="text-left p-2 font-medium">Type</th>
+                    <th className="text-right p-2 font-medium">Dimensions</th>
+                    <th className="text-right p-2 font-medium">Tare</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPallets.map((p, i) => {
+                    const dims = [p.depth, p.width].filter(Boolean);
+                    return (
+                      <tr key={p.id ?? i} className="border-t border-border">
+                        <td className="p-2 font-medium">{p.label || `Palette ${i + 1}`}</td>
+                        <td className="p-2 text-muted-foreground">{p.type ?? "—"}</td>
+                        <td className="p-2 text-right">{dims.length > 0 ? `${dims.join(" × ")} cm` : "—"}</td>
+                        <td className="p-2 text-right tabular">{fmtKg(p.weight ?? 0)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Récapitulatif poids */}
+          <div className="rounded-md border border-border bg-muted/20 p-4 space-y-1.5 text-sm">
+            <div className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground mb-2">Récapitulatif poids</div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Poids produits</span>
+              <span className="font-medium tabular">{fmtKg(totalProductWeight)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Palettes vides ({allPallets.length})</span>
+              <span className="font-medium tabular">{fmtKg(totalTareWeight)}</span>
+            </div>
+            <div className="flex justify-between border-t border-border pt-1.5 font-bold text-base">
+              <span>Poids total expédition</span>
+              <span className="tabular">{fmtKg(totalWeight)}</span>
+            </div>
+          </div>
+
+          {/* Zones de signature */}
+          <div className="grid grid-cols-2 gap-8 pt-4 border-t border-border">
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Émis par l'ESAT</div>
+              <div className="h-16 border-b border-dashed border-border" />
+              <div className="text-xs text-muted-foreground">Nom, signature et date</div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Reçu par le client / transporteur</div>
+              <div className="h-16 border-b border-dashed border-border" />
+              <div className="text-xs text-muted-foreground">Nom, signature et date</div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="print:hidden">
+          <Button variant="outline" onClick={onClose}>Fermer</Button>
+          <Button onClick={() => window.print()} className="gap-2">
+            <Printer className="h-4 w-4" /> Imprimer / PDF
           </Button>
         </DialogFooter>
       </DialogContent>
