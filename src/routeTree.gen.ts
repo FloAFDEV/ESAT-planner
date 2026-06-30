@@ -15,11 +15,14 @@ import { Route as ProductionRouteImport } from './routes/production'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LivraisonsRouteImport } from './routes/livraisons'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as ExportRouteImport } from './routes/export'
 import { Route as CoffretsRouteImport } from './routes/coffrets'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as ArchivesRouteImport } from './routes/archives'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LivraisonsIdRouteImport } from './routes/livraisons.$id'
+import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
+import { Route as LegalCguRouteImport } from './routes/legal/cgu'
 
 const StockRoute = StockRouteImport.update({
   id: '/stock',
@@ -49,6 +52,21 @@ const LivraisonsRoute = LivraisonsRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExportRoute = ExportRouteImport.update({
+  id: '/export',
+  path: '/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalCguRoute = LegalCguRouteImport.update({
+  id: '/legal/cgu',
+  path: '/legal/cgu',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoffretsRoute = CoffretsRouteImport.update({
@@ -82,7 +100,10 @@ export interface FileRoutesByFullPath {
   '/archives': typeof ArchivesRoute
   '/clients': typeof ClientsRoute
   '/coffrets': typeof CoffretsRoute
+  '/export': typeof ExportRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/legal/cgu': typeof LegalCguRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
   '/livraisons': typeof LivraisonsRouteWithChildren
   '/login': typeof LoginRoute
   '/production': typeof ProductionRoute
@@ -95,7 +116,10 @@ export interface FileRoutesByTo {
   '/archives': typeof ArchivesRoute
   '/clients': typeof ClientsRoute
   '/coffrets': typeof CoffretsRoute
+  '/export': typeof ExportRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/legal/cgu': typeof LegalCguRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
   '/livraisons': typeof LivraisonsRouteWithChildren
   '/login': typeof LoginRoute
   '/production': typeof ProductionRoute
@@ -109,7 +133,10 @@ export interface FileRoutesById {
   '/archives': typeof ArchivesRoute
   '/clients': typeof ClientsRoute
   '/coffrets': typeof CoffretsRoute
+  '/export': typeof ExportRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/legal/cgu': typeof LegalCguRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
   '/livraisons': typeof LivraisonsRouteWithChildren
   '/login': typeof LoginRoute
   '/production': typeof ProductionRoute
@@ -124,7 +151,10 @@ export interface FileRouteTypes {
     | '/archives'
     | '/clients'
     | '/coffrets'
+    | '/export'
     | '/forgot-password'
+    | '/legal/cgu'
+    | '/legal/privacy'
     | '/livraisons'
     | '/login'
     | '/production'
@@ -137,7 +167,10 @@ export interface FileRouteTypes {
     | '/archives'
     | '/clients'
     | '/coffrets'
+    | '/export'
     | '/forgot-password'
+    | '/legal/cgu'
+    | '/legal/privacy'
     | '/livraisons'
     | '/login'
     | '/production'
@@ -150,7 +183,10 @@ export interface FileRouteTypes {
     | '/archives'
     | '/clients'
     | '/coffrets'
+    | '/export'
     | '/forgot-password'
+    | '/legal/cgu'
+    | '/legal/privacy'
     | '/livraisons'
     | '/login'
     | '/production'
@@ -164,7 +200,10 @@ export interface RootRouteChildren {
   ArchivesRoute: typeof ArchivesRoute
   ClientsRoute: typeof ClientsRoute
   CoffretsRoute: typeof CoffretsRoute
+  ExportRoute: typeof ExportRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LegalCguRoute: typeof LegalCguRoute
+  LegalPrivacyRoute: typeof LegalPrivacyRoute
   LivraisonsRoute: typeof LivraisonsRouteWithChildren
   LoginRoute: typeof LoginRoute
   ProductionRoute: typeof ProductionRoute
@@ -214,6 +253,27 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/export': {
+      id: '/export'
+      path: '/export'
+      fullPath: '/export'
+      preLoaderRoute: typeof ExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/cgu': {
+      id: '/legal/cgu'
+      path: '/legal/cgu'
+      fullPath: '/legal/cgu'
+      preLoaderRoute: typeof LegalCguRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/privacy': {
+      id: '/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/coffrets': {
@@ -271,7 +331,10 @@ const rootRouteChildren: RootRouteChildren = {
   ArchivesRoute: ArchivesRoute,
   ClientsRoute: ClientsRoute,
   CoffretsRoute: CoffretsRoute,
+  ExportRoute: ExportRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  LegalCguRoute: LegalCguRoute,
+  LegalPrivacyRoute: LegalPrivacyRoute,
   LivraisonsRoute: LivraisonsRouteWithChildren,
   LoginRoute: LoginRoute,
   ProductionRoute: ProductionRoute,
