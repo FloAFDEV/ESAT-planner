@@ -151,7 +151,7 @@ function ForgotPasswordPage() {
 
         <p className="mt-6 text-center text-xs text-muted-foreground/60">
           Développé par{" "}
-          <a href="mailto:contact@afdev.fr" className="hover:underline">AFDEV</a>{" "}
+          <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="hover:underline">AFDEV</a>{" "}
           pour ESAT AGECET
         </p>
       </div>
