@@ -1,10 +1,10 @@
-import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
+import { createRootRouteWithContext, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { AppLayout } from "@/components/AppLayout";
 import type { AuthContextType } from "@/contexts/AuthContext";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/legal/cgu", "/legal/privacy"];
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -30,9 +30,11 @@ export const Route = createRootRouteWithContext<{
 });
 
 function RootComponent() {
-  const isPublicPath = PUBLIC_PATHS.some((p) =>
-    window.location.pathname === p
-  );
+  // useLocation() from TanStack Router is reactive — updates synchronously when
+  // navigate() is called, unlike window.location.pathname which only reflects
+  // the browser's URL and causes sidebar flicker on login/logout.
+  const { pathname } = useLocation();
+  const isPublicPath = PUBLIC_PATHS.some((p) => pathname === p);
 
   if (isPublicPath) {
     return (

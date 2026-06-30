@@ -3,6 +3,7 @@ import { LayoutDashboard, Factory, Boxes, Truck, Layers, Users, Archive, Sun, Mo
 import { UI } from "@/lib/uiLabels";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 import agecetLogo from "@/assets/logo_agecet_hands.jpg";
 
 const NAV = [
@@ -19,6 +20,7 @@ export function AppLayout() {
   const { dark, toggle } = useTheme();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  useSessionTimeout();
 
   const handleSignOut = async () => {
     await signOut();
@@ -86,7 +88,12 @@ export function AppLayout() {
           </button>
           <div className="text-[10px] text-sidebar-foreground/40 leading-tight px-2 pt-1">
             <div>v1.0 · ERP coffrets</div>
-            <div>Développé par <a href="mailto:contact@afdev.fr" className="hover:underline">AFDEV</a> pour ESAT AGECET</div>
+            <div>Développé par <a href="https://afdev.fr/" target="_blank" rel="noopener noreferrer" className="hover:underline">AFDEV</a> pour ESAT AGECET</div>
+            <div className="mt-1 flex gap-2">
+              <Link to="/legal/cgu" className="hover:underline">CGU</Link>
+              <span>·</span>
+              <Link to="/legal/privacy" className="hover:underline">Confidentialité</Link>
+            </div>
           </div>
         </div>
       </aside>
