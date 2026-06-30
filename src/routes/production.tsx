@@ -100,7 +100,7 @@ function ProductionPage() {
   const [filterStatus, setFilterStatus] = useState<string>(() => urlSearch.filterStatus ?? "all");
   const showDone = urlSearch.showDone ?? false;
   function setShowDone(v: boolean) {
-    navigate({ to: "/production", search: (prev: any) => ({ ...prev, showDone: v || undefined }), replace: true });
+    navigate({ to: "/production", search: (prev: any) => ({ ...prev, showDone: v || undefined }), replace: true, resetScroll: false });
   }
   const [filterClientRef, setFilterClientRef] = useState<string>("all");
   const [filterDatePreset, setFilterDatePreset] = useState<string>("all");

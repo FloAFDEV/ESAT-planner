@@ -19,6 +19,9 @@ export function CreateClientDialog({ onSuccess }: CreateClientDialogProps) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [city, setCity] = useState("");
@@ -29,6 +32,9 @@ export function CreateClientDialog({ onSuccess }: CreateClientDialogProps) {
       if (!name.trim()) throw new Error("Nom client requis");
       const { error } = await sb.from("clients").insert({
         name: name.trim(),
+        contact_name: contactName.trim() || null,
+        phone: phone.trim() || null,
+        email: email.trim() || null,
         address: address.trim() || null,
         postal_code: postalCode.trim() || null,
         city: city.trim() || null,
@@ -40,11 +46,8 @@ export function CreateClientDialog({ onSuccess }: CreateClientDialogProps) {
       qc.invalidateQueries({ queryKey: ["clients"] });
       toast.success(MSG.CLIENT_CREATED);
       setOpen(false);
-      setName("");
-      setAddress("");
-      setPostalCode("");
-      setCity("");
-      setCountry("France");
+      setName(""); setContactName(""); setPhone(""); setEmail("");
+      setAddress(""); setPostalCode(""); setCity(""); setCountry("France");
       onSuccess?.();
     },
     onError: (e: unknown) => toast.error(parseSupabaseError(e)),
@@ -59,8 +62,22 @@ export function CreateClientDialog({ onSuccess }: CreateClientDialogProps) {
         <DialogHeader><DialogTitle>Créer un client</DialogTitle></DialogHeader>
         <div className="space-y-3 py-1">
           <div className="space-y-1">
-            <Label>Nom</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Label>Nom <span className="text-destructive">*</span></Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Raison sociale" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label>Contact</Label>
+              <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Prénom Nom" />
+            </div>
+            <div className="space-y-1">
+              <Label>Téléphone</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 xx xx xx xx" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contact@societe.fr" />
           </div>
           <div className="space-y-1">
             <Label>Adresse</Label>

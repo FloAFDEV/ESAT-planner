@@ -12,8 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Pencil, Plus, Trash2, Download, Truck } from "lucide-react";
+import { Pencil, Plus, Trash2, Download, Truck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { fmtDate, fmtInt, fmtKg } from "@/lib/format";
+import { clientCompleteness } from "@/lib/clientCompleteness";
 
 export const Route = createFileRoute("/clients")({
   head: () => ({
@@ -273,25 +274,33 @@ function ClientsPage() {
               {filtered.length === 0 && (
                 <p className="p-4 text-sm text-muted-foreground">Aucun client.</p>
               )}
-              {filtered.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedId(c.id)}
-                  className={`w-full text-left px-4 py-3 text-sm transition-colors ${
-                    selectedId === c.id ? "bg-muted" : "hover:bg-muted/40"
-                  }`}
-                >
-                  <div className="font-medium">{c.name}</div>
-                  {c.city && (
-                    <div className="text-xs text-muted-foreground">
-                      {c.postal_code} {c.city}
+              {filtered.map((c) => {
+                const { missingFields } = clientCompleteness(c);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelectedId(c.id)}
+                    className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                      selectedId === c.id ? "bg-muted" : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{c.name}</span>
+                      {missingFields.length > 0 && (
+                        <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" title={`Incomplet — manquant : ${missingFields.join(", ")}`} />
+                      )}
                     </div>
-                  )}
-                  {c.email && (
-                    <div className="text-xs text-muted-foreground truncate">{c.email}</div>
-                  )}
-                </button>
-              ))}
+                    {c.city && (
+                      <div className="text-xs text-muted-foreground">
+                        {c.postal_code} {c.city}
+                      </div>
+                    )}
+                    {c.email && (
+                      <div className="text-xs text-muted-foreground truncate">{c.email}</div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -309,7 +318,21 @@ function ClientsPage() {
               <Card>
                 <CardHeader className="flex-row items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="text-lg">{selected.name}</CardTitle>
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-lg">{selected.name}</CardTitle>
+                      {(() => {
+                        const { complete, missingFields } = clientCompleteness(selected);
+                        return complete ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded px-2 py-0.5">
+                            <CheckCircle2 className="h-3 w-3" /> Profil complet
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5" title={`Manquant : ${missingFields.join(", ")}`}>
+                            <AlertTriangle className="h-3 w-3" /> {missingFields.length} info{missingFields.length > 1 ? "s" : ""} manquante{missingFields.length > 1 ? "s" : ""}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     {selected.contact_name && (
                       <p className="text-sm text-muted-foreground mt-0.5">Contact : {selected.contact_name}</p>
                     )}
@@ -432,6 +455,19 @@ function ClientsPage() {
           <DialogHeader>
             <DialogTitle>{editMode === "create" ? "Nouveau client" : "Modifier le client"}</DialogTitle>
           </DialogHeader>
+          {(() => {
+            const { complete, missingFields } = clientCompleteness(editForm);
+            return complete ? (
+              <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Profil complet — le BL sera entièrement renseigné
+              </div>
+            ) : (
+              <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>Manquant pour un BL complet : {missingFields.join(", ")}</span>
+              </div>
+            );
+          })()}
           <div className="space-y-3 py-1">
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-1">
